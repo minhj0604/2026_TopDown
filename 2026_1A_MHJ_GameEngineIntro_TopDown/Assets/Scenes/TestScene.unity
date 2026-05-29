@@ -9339,6 +9339,8 @@ GameObject:
   - component: {fileID: 1421788117}
   - component: {fileID: 1421788116}
   - component: {fileID: 1421788120}
+  - component: {fileID: 1421788122}
+  - component: {fileID: 1421788121}
   m_Layer: 0
   m_Name: Player
   m_TagString: Untagged
@@ -9415,7 +9417,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ad1ab32c74720f247aa64e9587514dee, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerController
-  moveSpeed: 1.4
+  moveSpeed: 1.8
   spriteUp:
   - {fileID: -6451858070629168965, guid: 9d0aa238c0afad3429fc4e008b20d6fd, type: 3}
   - {fileID: -2516155583759638671, guid: 58cd0112276a02344aa3eec16fb2a3ff, type: 3}
@@ -9549,6 +9551,45 @@ SpriteRenderer:
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 0
   m_SpriteSortPoint: 0
+--- !u!114 &1421788121
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1421788115}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 975b3dd1090421540b01afddb88b883a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerCombat
+  currentWeapon: {fileID: 11400000, guid: 61acd8b0d158e6649a766b1075d48659, type: 2}
+  maxCombo: 3
+  comboResetTime: 0.8
+  attackTrigger: Attack
+  comboStepParam: ComboStep
+--- !u!95 &1421788122
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1421788115}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: d7f43780cf528de4fbac7e6bdf715ef3, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0
 --- !u!1 &1508792374
 GameObject:
   m_ObjectHideFlags: 0
