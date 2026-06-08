@@ -15,9 +15,10 @@ MonoBehaviour:
   weaponName: "\uB300\uB0AB"
   icon: {fileID: 0}
   description: 
-  attackPower: 1
-  attackSpeed: 1
-  attackRange: 1
+  attackPower: 16
+  attackSpeed: 0.8
+  attackRange: 0.88
+  comboCount: 3
   watchSkillType: 2
-  gaugeCost: 0
+  gaugeCost: 30
   weaponPrefab: {fileID: 0}

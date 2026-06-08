@@ -10,21 +10,22 @@ public enum WatchSkillType
 [CreateAssetMenu(fileName = "New WeaponData", menuName = "Game Data/Weapon Data")]
 public class WeaponData : ScriptableObject
 {
-    [Header("±âº» Á¤º¸")]
+    [Header("ê¸°ë³¸ ì •ë³´")]
     public string weaponName;
     public Sprite icon;
     [TextArea(3, 5)]
     public string description;
 
-    [Header("ÀüÅõ ½ºÅÈ")]
+    [Header("ì „íˆ¬ ìŠ¤íƒ¯")]
     public float attackPower;
     public float attackSpeed;
     public float attackRange;
+    public int comboCount = 3;
 
-    [Header("È¸Áß½Ã°è")]
+    [Header("íšŒì¤‘ì‹œê³„")]
     public WatchSkillType watchSkillType;
     public float gaugeCost;
 
-    [Header("ÇÁ¸®ÆÕ")]
+    [Header("í”„ë¦¬íŒ¹")]
     public GameObject weaponPrefab;
 }

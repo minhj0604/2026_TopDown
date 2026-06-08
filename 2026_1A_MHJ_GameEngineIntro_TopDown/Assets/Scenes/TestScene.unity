@@ -9342,6 +9342,11 @@ GameObject:
   - component: {fileID: 1421788122}
   - component: {fileID: 1421788121}
   - component: {fileID: 1421788123}
+  - component: {fileID: 1421788124}
+  - component: {fileID: 1421788125}
+  - component: {fileID: 1421788126}
+  - component: {fileID: 1421788127}
+  - component: {fileID: 1421788128}
   m_Layer: 0
   m_Name: Player
   m_TagString: Untagged
@@ -9564,11 +9569,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 975b3dd1090421540b01afddb88b883a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerCombat
-  currentWeapon: {fileID: 11400000, guid: 61acd8b0d158e6649a766b1075d48659, type: 2}
-  weaponSlot1: {fileID: 11400000, guid: 61acd8b0d158e6649a766b1075d48659, type: 2}
+  currentWeapon: {fileID: 11400000, guid: efc10d2e66d0b1342bb0597bfe0f5258, type: 2}
+  weaponSlot1: {fileID: 11400000, guid: efc10d2e66d0b1342bb0597bfe0f5258, type: 2}
   weaponSlot2: {fileID: 11400000, guid: 65398ec9794c3ea44a6eb4f1a1fff92b, type: 2}
-  maxCombo: 3
+  weaponSlot3: {fileID: 11400000, guid: 61acd8b0d158e6649a766b1075d48659, type: 2}
+  clockOutput: {fileID: 1421788124}
+  swapAttackBonusTime: 1.2
+  maxCombo: 5
+  animatorComboStateCount: 5
   comboResetTime: 0.8
+  comboEndRecoveryTime: 0.35
+  attackSafetyTime: 1.2
   attackTrigger: Attack
   comboStepParam: ComboStep
   attackOrigin: {fileID: 0}
@@ -9649,6 +9660,93 @@ BoxCollider2D:
   m_AutoTiling: 0
   m_Size: {x: 0.6, y: 0.6}
   m_EdgeRadius: 0
+--- !u!114 &1421788124
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1421788115}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0844ea61b63442d99e6db777ebbdb2e3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ClockOutputSystem
+  maxOutput: 100
+  currentOutput: 50
+  attackHitGain: 8
+  swapAttackBonusGain: 8
+  dodgeGain: 6
+  showDebugUI: 1
+--- !u!114 &1421788125
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1421788115}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e63c9086d811440787dd0aacde4bad24, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerDodge
+  dodgeDistance: 0.8
+  dodgeDuration: 0.15
+  justDodgeValidTime: 1
+  justDodgeCheckRange: 0.9
+  successSlowScale: 0.35
+  successSlowTime: 0.18
+--- !u!114 &1421788128
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1421788115}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 36a68fa8a9594b858d99a57d857c482f, type: 3}
+  m_Name: ''
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerHealth
+  maxHealth: 100
+  hurtInvincibleTime: 0.45
+  showDebugUI: 1
+--- !u!114 &1421788126
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1421788115}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0b8f127b704048938ea653563fe2a8b9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerWatchSkill
+  defaultSkillCost: 30
+  counterDelay: 0.2
+  counterGroggyDuration: 1.2
+  timeStopDuration: 1.5
+  markRange: 4
+  blinkOffset: 0.45
+  blinkSlashRadius: 0.5
+  blinkInvincibleTime: 0.35
+--- !u!114 &1421788127
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1421788115}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9290974f6d78466f93931782dbc32247, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerParry
+  parryCheckRange: 0.85
+  counterReadyTime: 1
+  successSlowScale: 0.35
+  successSlowTime: 0.18
 --- !u!1001 &1483318681
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -9700,6 +9798,10 @@ PrefabInstance:
     - target: {fileID: 100001, guid: dd78031b2f2141109c8ab587379dd8ae, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 100005, guid: dd78031b2f2141109c8ab587379dd8ae, type: 3}
+      propertyPath: knockbackForce
+      value: 0.1
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -9763,6 +9865,8 @@ GameObject:
   - component: {fileID: 1800000002}
   - component: {fileID: 1800000003}
   - component: {fileID: 1800000004}
+  - component: {fileID: 1800000005}
+  - component: {fileID: 1800000006}
   m_Layer: 0
   m_Name: Dungeon Run Manager
   m_TagString: Untagged
@@ -9797,6 +9901,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b16416d1622341ca98d302a990f191d3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DungeonRunManager
+  stageData: {fileID: 11400000, guid: ee45c79f1fec4ec1bc28faf94a98e05b, type: 2}
   nodesPerDungeon: 5
   maxDungeonLevel: 2
   showDebugUI: 1
@@ -9816,6 +9921,34 @@ MonoBehaviour:
   exitDoor: {fileID: 1800000014}
   player: {fileID: 1421788119}
   playerStartPosition: {x: -0.09335, y: 0.35847}
+--- !u!114 &1800000005
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1800000001}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7c3ddf5269b04a8e890077f2f2cf4e53, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SaveDataManager
+  loadOnAwake: 1
+  showDebugUI: 1
+--- !u!114 &1800000006
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1800000001}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 91c2247764de40f49b1a76d7e4812cd1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GameSettingsManager
+  defaultMasterVolume: 1
+  defaultFullscreen: 1
 --- !u!1 &1800000010
 GameObject:
   m_ObjectHideFlags: 0
@@ -9969,6 +10102,190 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DungeonExitDoor
   dungeonRunManager: {fileID: 1800000003}
   openColor: {r: 0.2, g: 0.9, b: 1, a: 0.85}
+--- !u!1 &1800000100
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1800000101}
+  - component: {fileID: 1800000102}
+  - component: {fileID: 1800000103}
+  - component: {fileID: 1800000104}
+  - component: {fileID: 1800000105}
+  m_Layer: 0
+  m_Name: Chaser Enemy
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1800000101
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1800000100}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -1.4, y: -1.1, z: 0}
+  m_LocalScale: {x: 0.7, y: 0.7, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!212 &1800000102
+SpriteRenderer:
+  serializedVersion: 2
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1800000100}
+  m_Enabled: 1
+  m_CastShadows: 0
+  m_ReceiveShadows: 0
+  m_DynamicOccludee: 1
+  m_StaticShadowCaster: 0
+  m_MotionVectors: 1
+  m_LightProbeUsage: 1
+  m_ReflectionProbeUsage: 1
+  m_RayTracingMode: 0
+  m_RayTraceProcedural: 0
+  m_RayTracingAccelStructBuildFlagsOverride: 0
+  m_RayTracingAccelStructBuildFlags: 1
+  m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
+  m_RenderingLayerMask: 1
+  m_RendererPriority: 0
+  m_Materials:
+  - {fileID: 10754, guid: 0000000000000000f000000000000000, type: 0}
+  m_StaticBatchInfo:
+    firstSubMesh: 0
+    subMeshCount: 0
+  m_StaticBatchRoot: {fileID: 0}
+  m_ProbeAnchor: {fileID: 0}
+  m_LightProbeVolumeOverride: {fileID: 0}
+  m_ScaleInLightmap: 1
+  m_ReceiveGI: 1
+  m_PreserveUVs: 0
+  m_IgnoreNormalsForChartDetection: 0
+  m_ImportantGI: 0
+  m_StitchLightmapSeams: 1
+  m_SelectedEditorRenderState: 0
+  m_MinimumChartSize: 4
+  m_AutoUVMaxDistance: 0.5
+  m_AutoUVMaxAngle: 89
+  m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
+  m_SortingLayerID: 0
+  m_SortingLayer: 0
+  m_SortingOrder: 2
+  m_MaskInteraction: 0
+  m_Sprite: {fileID: 0}
+  m_Color: {r: 0.35, g: 0.9, b: 0.45, a: 1}
+  m_FlipX: 0
+  m_FlipY: 0
+  m_DrawMode: 0
+  m_Size: {x: 1, y: 1}
+  m_AdaptiveModeThreshold: 0.5
+  m_SpriteTileMode: 0
+  m_WasSpriteAssigned: 0
+  m_SpriteSortPoint: 0
+--- !u!50 &1800000103
+Rigidbody2D:
+  serializedVersion: 5
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1800000100}
+  m_BodyType: 0
+  m_Simulated: 1
+  m_UseFullKinematicContacts: 0
+  m_UseAutoMass: 0
+  m_Mass: 1
+  m_LinearDamping: 2
+  m_AngularDamping: 0.05
+  m_GravityScale: 0
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_Interpolate: 0
+  m_SleepingMode: 1
+  m_CollisionDetection: 0
+  m_Constraints: 4
+--- !u!61 &1800000104
+BoxCollider2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1800000100}
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Density: 1
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_ForceSendLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ForceReceiveLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ContactCaptureLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_CallbackLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_IsTrigger: 1
+  m_UsedByEffector: 0
+  m_CompositeOperation: 0
+  m_CompositeOrder: 0
+  m_Offset: {x: 0, y: 0}
+  m_SpriteTilingProperty:
+    border: {x: 0, y: 0, z: 0, w: 0}
+    pivot: {x: 0.5, y: 0.5}
+    oldSize: {x: 1, y: 1}
+    newSize: {x: 1, y: 1}
+    adaptiveTilingThreshold: 0.5
+    drawMode: 0
+    adaptiveTiling: 0
+  m_AutoTiling: 0
+  m_Size: {x: 0.65, y: 0.65}
+  m_EdgeRadius: 0
+--- !u!114 &1800000105
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1800000100}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2b5d48554ccd4e918ee2f52663c5d748, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ChaserEnemy
+  enemyData: {fileID: 11400000, guid: 2ca46a4e9be84673a32a966f32c9f7b3, type: 2}
+  hitColor: {r: 1, g: 0.25, b: 0.2, a: 1}
+  timeStopColor: {r: 0.25, g: 0.8, b: 1, a: 1}
+  groggyColor: {r: 1, g: 0.9, b: 0.2, a: 1}
+  hitFlashTime: 0.08
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -9979,3 +10296,4 @@ SceneRoots:
   - {fileID: 1800000002}
   - {fileID: 1800000011}
   - {fileID: 1483318681}
+  - {fileID: 1800000101}

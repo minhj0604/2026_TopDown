@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c5cc459c2f1e4f44b74dcfb7fcb93642, type: 3}
+  m_Name: StageData_TestDungeon
+  m_EditorClassIdentifier: 
+  stageId: test_dungeon
+  stageName: Test Dungeon
+  nodesPerDungeon: 5
+  firstNode: {fileID: 11400000, guid: b0cbe29b3ae04695ad79b516e0ce07f2, type: 2}
+  bossNode: {fileID: 11400000, guid: 7584b82ec87a4c158ad2ba4a126428ee, type: 2}
+  randomNodePool:
+  - {fileID: 11400000, guid: b0cbe29b3ae04695ad79b516e0ce07f2, type: 2}
+  - {fileID: 11400000, guid: b0cbe29b3ae04695ad79b516e0ce07f2, type: 2}
+  - {fileID: 11400000, guid: 4db58deea0424be6ae193ef4b0f73c24, type: 2}
+  - {fileID: 11400000, guid: ae82f332de284616b4674d7b3d5ea75d, type: 2}
+  - {fileID: 11400000, guid: d7a3331ae1e14602874eeedbbcd1195a, type: 2}

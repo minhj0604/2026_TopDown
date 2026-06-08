@@ -16,8 +16,9 @@ MonoBehaviour:
   icon: {fileID: 0}
   description: 
   attackPower: 10
-  attackSpeed: 1
-  attackRange: 3
+  attackSpeed: 1.1
+  attackRange: 0.62
+  comboCount: 4
   watchSkillType: 1
-  gaugeCost: 0
+  gaugeCost: 25
   weaponPrefab: {fileID: 0}

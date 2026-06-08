@@ -9,7 +9,7 @@ public class DungeonRoomController : MonoBehaviour
 
     private int lastDungeonLevel = -1;
     private int lastNodeIndex = -1;
-    private EnemyDummy[] roomEnemies;
+    private MonoBehaviour[] roomEnemyBehaviours;
 
     private void Awake()
     {
@@ -24,7 +24,7 @@ public class DungeonRoomController : MonoBehaviour
                 player = playerController.transform;
         }
 
-        roomEnemies = FindObjectsByType<EnemyDummy>(FindObjectsSortMode.None);
+        CacheRoomEnemies();
     }
 
     private void Update()
@@ -75,19 +75,20 @@ public class DungeonRoomController : MonoBehaviour
 
     private void SetEnemiesActive(bool isActive)
     {
-        for (int i = 0; i < roomEnemies.Length; i++)
+        for (int i = 0; i < roomEnemyBehaviours.Length; i++)
         {
-            if (roomEnemies[i] != null)
-                roomEnemies[i].gameObject.SetActive(isActive);
+            if (roomEnemyBehaviours[i] != null)
+                roomEnemyBehaviours[i].gameObject.SetActive(isActive);
         }
     }
 
     private void ResetEnemies()
     {
-        for (int i = 0; i < roomEnemies.Length; i++)
+        for (int i = 0; i < roomEnemyBehaviours.Length; i++)
         {
-            if (roomEnemies[i] != null)
-                roomEnemies[i].ResetHealth();
+            IRoomEnemy roomEnemy = roomEnemyBehaviours[i] as IRoomEnemy;
+            if (roomEnemy != null)
+                roomEnemy.ResetEnemy();
         }
     }
 
@@ -97,12 +98,37 @@ public class DungeonRoomController : MonoBehaviour
         if (dungeonRunManager.IsWaitingForChoice) return false;
         if (!dungeonRunManager.IsCurrentNodeCombat) return true;
 
-        for (int i = 0; i < roomEnemies.Length; i++)
+        for (int i = 0; i < roomEnemyBehaviours.Length; i++)
         {
-            if (roomEnemies[i] != null && roomEnemies[i].gameObject.activeSelf && !roomEnemies[i].IsDead)
+            MonoBehaviour enemyBehaviour = roomEnemyBehaviours[i];
+            IRoomEnemy roomEnemy = enemyBehaviour as IRoomEnemy;
+            if (roomEnemy != null && enemyBehaviour.gameObject.activeSelf && !roomEnemy.IsDead)
                 return false;
         }
 
         return true;
+    }
+
+    private void CacheRoomEnemies()
+    {
+        MonoBehaviour[] behaviours = FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None);
+        int enemyCount = 0;
+
+        for (int i = 0; i < behaviours.Length; i++)
+        {
+            if (behaviours[i] is IRoomEnemy)
+                enemyCount++;
+        }
+
+        roomEnemyBehaviours = new MonoBehaviour[enemyCount];
+        int index = 0;
+        for (int i = 0; i < behaviours.Length; i++)
+        {
+            if (behaviours[i] is IRoomEnemy)
+            {
+                roomEnemyBehaviours[index] = behaviours[i];
+                index++;
+            }
+        }
     }
 }

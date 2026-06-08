@@ -15,9 +15,10 @@ MonoBehaviour:
   weaponName: "\uC678\uACE8\uACA9 \uD655\uC7A5\uBB34\uC7A5"
   icon: {fileID: 0}
   description: 
-  attackPower: 0
-  attackSpeed: 0
-  attackRange: 0
+  attackPower: 7
+  attackSpeed: 1.35
+  attackRange: 0.42
+  comboCount: 5
   watchSkillType: 0
-  gaugeCost: 0
+  gaugeCost: 20
   weaponPrefab: {fileID: 0}

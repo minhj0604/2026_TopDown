@@ -11,6 +11,9 @@ public enum DungeonNodeType
 
 public class DungeonRunManager : MonoBehaviour
 {
+    [Header("레벨 디자인 데이터")]
+    [SerializeField] private StageData stageData;
+
     [Header("던전 진행")]
     [SerializeField] private int nodesPerDungeon = 5;
     [SerializeField] private int maxDungeonLevel = 2;
@@ -86,6 +89,9 @@ public class DungeonRunManager : MonoBehaviour
         currentNodeIndex++;
         waitingForChoice = false;
 
+        if (SaveDataManager.Instance != null)
+            SaveDataManager.Instance.RecordDungeonProgress(dungeonLevel, currentNodeIndex);
+
         Debug.Log($"Dungeon {dungeonLevel} / Node {currentNodeIndex}: {currentNodeType}", this);
     }
 
@@ -109,17 +115,17 @@ public class DungeonRunManager : MonoBehaviour
         waitingForChoice = true;
 
         int nextNodeIndex = currentNodeIndex + 1;
-        if (nextNodeIndex >= nodesPerDungeon)
+        if (nextNodeIndex >= GetNodesPerDungeon())
         {
-            leftChoice = DungeonNodeType.Boss;
-            rightChoice = DungeonNodeType.Boss;
+            leftChoice = GetBossNodeType();
+            rightChoice = GetBossNodeType();
             return;
         }
 
         if (nextNodeIndex == 1)
         {
-            leftChoice = DungeonNodeType.Battle;
-            rightChoice = DungeonNodeType.Battle;
+            leftChoice = GetFirstNodeType();
+            rightChoice = GetFirstNodeType();
             return;
         }
 
@@ -132,6 +138,10 @@ public class DungeonRunManager : MonoBehaviour
 
     private DungeonNodeType GetRandomNodeType()
     {
+        DungeonNodeType scriptedNodeType;
+        if (TryGetRandomNodeTypeFromStageData(out scriptedNodeType))
+            return scriptedNodeType;
+
         int randomValue = Random.Range(0, 100);
 
         if (dungeonLevel <= 1)
@@ -162,13 +172,56 @@ public class DungeonRunManager : MonoBehaviour
             : DungeonNodeType.Battle;
     }
 
+    private int GetNodesPerDungeon()
+    {
+        if (stageData != null && stageData.nodesPerDungeon > 0)
+            return stageData.nodesPerDungeon;
+
+        return nodesPerDungeon;
+    }
+
+    private DungeonNodeType GetFirstNodeType()
+    {
+        if (stageData != null && stageData.firstNode != null)
+            return stageData.firstNode.nodeType;
+
+        return DungeonNodeType.Battle;
+    }
+
+    private DungeonNodeType GetBossNodeType()
+    {
+        if (stageData != null && stageData.bossNode != null)
+            return stageData.bossNode.nodeType;
+
+        return DungeonNodeType.Boss;
+    }
+
+    private bool TryGetRandomNodeTypeFromStageData(out DungeonNodeType nodeType)
+    {
+        nodeType = DungeonNodeType.Battle;
+
+        if (stageData == null || stageData.randomNodePool == null || stageData.randomNodePool.Length == 0)
+            return false;
+
+        for (int i = 0; i < 12; i++)
+        {
+            NodeData nodeData = stageData.randomNodePool[Random.Range(0, stageData.randomNodePool.Length)];
+            if (nodeData == null) continue;
+
+            nodeType = nodeData.nodeType;
+            return true;
+        }
+
+        return false;
+    }
+
     private void OnGUI()
     {
         if (!showDebugUI) return;
 
         GUILayout.BeginArea(new Rect(20f, 20f, 260f, 180f), GUI.skin.box);
         GUILayout.Label($"Dungeon Level: {dungeonLevel}");
-        GUILayout.Label($"Node: {currentNodeIndex} / {nodesPerDungeon}");
+        GUILayout.Label($"Node: {currentNodeIndex} / {GetNodesPerDungeon()}");
 
         if (isRunFinished)
         {
