@@ -1,56 +1,114 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 using System.Collections;
+using System.Collections.Generic;
 
 [RequireComponent(typeof(Animator))]
 public class PlayerCombat : MonoBehaviour
 {
-    [Header("ÀåÂø ¹«±â")]
+    [Header("ì¥ì°© ë¬´ê¸°")]
     public WeaponData currentWeapon;
 
-    [Header("ÄŞº¸ ¼³Á¤")]
-    [Tooltip("ÃÖ´ë ÄŞº¸ ´Ü°è (1~maxCombo ±îÁö ¼øÈ¯)")]
+    [Header("ë¬´ê¸° ìŠ¤ì™‘")]
+    public WeaponData weaponSlot1;
+    public WeaponData weaponSlot2;
+
+    [Header("ì½¤ë³´ ì„¤ì •")]
+    [Tooltip("ìµœëŒ€ ì½¤ë³´ ë‹¨ê³„ (1~maxCombo ê¹Œì§€ ìˆœí™˜)")]
     public int maxCombo = 3;
-    [Tooltip("´ÙÀ½ ÀÔ·ÂÀ» ¹Ş¾ÆÁÖ´Â À¯¿¹ ½Ã°£(ÃÊ). ÀÌ ½Ã°£ÀÌ Áö³ª¸é ÄŞº¸ ÃÊ±âÈ­")]
+    [Tooltip("ë‹¤ìŒ ì…ë ¥ì„ ë°›ì•„ì£¼ëŠ” ìœ ì˜ˆ ì‹œê°„(ì´ˆ). ì´ ì‹œê°„ì´ ì§€ë‚˜ë©´ ì½¤ë³´ ì´ˆê¸°í™”")]
     public float comboResetTime = 0.8f;
 
-    [Header("Animator ÆÄ¶ó¹ÌÅÍ ÀÌ¸§")]
+    [Header("Animator íŒŒë¼ë¯¸í„° ì´ë¦„")]
     [SerializeField] private string attackTrigger = "Attack";
     [SerializeField] private string comboStepParam = "ComboStep";
 
-    // ¿ÜºÎ(PlayerController)¿¡¼­ ÀÌµ¿ Àá±İ¿¡ »ç¿ë
+    [Header("íƒ€ê²© íŒì •")]
+    [Tooltip("ë¹„ì›Œë‘ë©´ í”Œë ˆì´ì–´ ì•ìª½ìœ¼ë¡œ ë¬´ê¸° ì‚¬ê±°ë¦¬ë§Œí¼ ìë™ íŒì •í•©ë‹ˆë‹¤.")]
+    [SerializeField] private Transform attackOrigin;
+    [SerializeField] private LayerMask hitLayers = ~0;
+    [SerializeField] private float minimumHitRadius = 0.15f;
+    [SerializeField] private bool showDebugHitArea = true;
+
+    [Header("ë²”ìœ„ í‘œì‹œ")]
+    [SerializeField] private bool showRangePreview = true;
+    [SerializeField] private Color rangePreviewColor = new Color(1f, 0.25f, 0.15f, 0.55f);
+    [SerializeField] private float rangePreviewWidth = 0.03f;
+    [SerializeField] private int rangePreviewSegments = 48;
+
+    // ì™¸ë¶€(PlayerController)ì—ì„œ ì´ë™ ì ê¸ˆì— ì‚¬ìš©
     public bool IsAttacking => isAttacking;
     public int ComboStep => comboStep;
+    public int CurrentWeaponSlot => currentWeaponIndex + 1;
 
     private Animator animator;
-    private PlayerController controller;   // °ø°İ Á¾·á ÈÄ ÀÌµ¿ º¹±Í ¾Ë¸²¿ë
+    private PlayerController controller;   // ê³µê²© ì¢…ë£Œ í›„ ì´ë™ ë³µê·€ ì•Œë¦¼ìš©
     private int comboStep = 0;
     private bool isAttacking = false;
-    private bool bufferedInput = false;   // °ø°İ Áß¿¡ µé¾î¿Â ´ÙÀ½ ÀÔ·Â ¿¹¾à
+    private bool bufferedInput = false;   // ê³µê²© ì¤‘ì— ë“¤ì–´ì˜¨ ë‹¤ìŒ ì…ë ¥ ì˜ˆì•½
     private Coroutine resetRoutine;
+    private Vector2 attackDirection = Vector2.down;
+    private int currentWeaponIndex = 0;
+    private LineRenderer rangePreview;
+
+    private readonly Collider2D[] hitBuffer = new Collider2D[16];
+    private readonly List<MonoBehaviour> damagedTargets = new List<MonoBehaviour>();
 
     private void Awake()
     {
         animator = GetComponent<Animator>();
         controller = GetComponent<PlayerController>();
+
+        if (weaponSlot1 == null)
+            weaponSlot1 = currentWeapon;
+
+        EquipWeapon(0, false);
+        SetupRangePreview();
     }
 
-    // Input System: Attack ¾×¼Ç¿¡ ¿¬°á (PlayerInput - Send Messages ¹æ½Ä ±âÁØ)
+    private void LateUpdate()
+    {
+        UpdateRangePreview();
+    }
+
+    // Input System: Move ì•¡ì…˜ì— í•¨ê»˜ ì—°ê²°ë˜ì–´ ë§ˆì§€ë§‰ ì…ë ¥ ë°©í–¥ì„ ê³µê²© ë°©í–¥ìœ¼ë¡œ ì‚¬ìš©í•œë‹¤.
+    public void OnMove(InputValue value)
+    {
+        Vector2 moveInput = value.Get<Vector2>();
+        if (moveInput.sqrMagnitude > 0.01f)
+            attackDirection = moveInput.normalized;
+    }
+
+    // Input System: Attack ì•¡ì…˜ì— ì—°ê²° (PlayerInput - Send Messages ë°©ì‹ ê¸°ì¤€)
     public void OnAttack(InputValue value)
     {
         if (!value.isPressed) return;
         TryAttack();
     }
 
+    // Input System: Previous ì•¡ì…˜ì— ì—°ê²°. ê¸°ë³¸ í‚¤ ì„¤ì •ì€ ìˆ«ì 1.
+    public void OnPrevious(InputValue value)
+    {
+        if (!value.isPressed) return;
+        EquipWeapon(0, true);
+    }
+
+    // Input System: Next ì•¡ì…˜ì— ì—°ê²°. ê¸°ë³¸ í‚¤ ì„¤ì •ì€ ìˆ«ì 2.
+    public void OnNext(InputValue value)
+    {
+        if (!value.isPressed) return;
+        EquipWeapon(1, true);
+    }
+
     private void TryAttack()
     {
-        // °ø°İ ¼Óµµ º¸Á¤ (¹«±â°¡ ÀÖÀ¸¸é attackSpeed¸¦ ¾Ö´Ï¸ŞÀÌÅÍ speed¿¡ ¹İ¿µ)
+        // ê³µê²© ì†ë„ ë³´ì • (ë¬´ê¸°ê°€ ìˆìœ¼ë©´ attackSpeedë¥¼ ì• ë‹ˆë©”ì´í„° speedì— ë°˜ì˜)
         if (currentWeapon != null && currentWeapon.attackSpeed > 0f)
             animator.speed = currentWeapon.attackSpeed;
 
         if (isAttacking)
         {
-            // ÀÌ¹Ì ¸ğ¼Ç ÁßÀÌ¸é ´ÙÀ½ ÄŞº¸ ÀÔ·ÂÀ» ¹öÆÛ¸µ¸¸ ÇØµĞ´Ù.
+            // ì´ë¯¸ ëª¨ì…˜ ì¤‘ì´ë©´ ë‹¤ìŒ ì½¤ë³´ ì…ë ¥ì„ ë²„í¼ë§ë§Œ í•´ë‘”ë‹¤.
             bufferedInput = true;
             return;
         }
@@ -70,34 +128,75 @@ public class PlayerCombat : MonoBehaviour
         animator.SetInteger(comboStepParam, comboStep);
         animator.SetTrigger(attackTrigger);
 
-        // À¯¿¹ Å¸ÀÌ¸Ó Àç½ÃÀÛ
+        // ìœ ì˜ˆ íƒ€ì´ë¨¸ ì¬ì‹œì‘
         if (resetRoutine != null) StopCoroutine(resetRoutine);
         resetRoutine = StartCoroutine(ComboResetTimer());
+    }
+
+    private void EquipWeapon(int slotIndex, bool resetCombo)
+    {
+        if (isAttacking) return;
+
+        WeaponData nextWeapon = GetWeaponInSlot(slotIndex);
+        if (nextWeapon == null) return;
+
+        currentWeapon = nextWeapon;
+        currentWeaponIndex = slotIndex;
+        animator.speed = 1f;
+
+        if (resetCombo)
+            ResetCombo();
+    }
+
+    private WeaponData GetWeaponInSlot(int slotIndex)
+    {
+        if (slotIndex == 0) return weaponSlot1;
+        if (slotIndex == 1) return weaponSlot2;
+        return null;
     }
 
     private IEnumerator ComboResetTimer()
     {
         yield return new WaitForSeconds(comboResetTime);
-        // À¯¿¹ ½Ã°£ ¾È¿¡ ´ÙÀ½ ÀÔ·ÂÀÌ ¾ø¾úÀ¸¸é ÄŞº¸ Á¾·á
+        // ìœ ì˜ˆ ì‹œê°„ ì•ˆì— ë‹¤ìŒ ì…ë ¥ì´ ì—†ì—ˆìœ¼ë©´ ì½¤ë³´ ì¢…ë£Œ
         ResetCombo();
     }
 
     /// <summary>
-    /// Animation Event: Å¸°İ ÇÁ·¹ÀÓ¿¡¼­ È£Ãâ. ½ÇÁ¦ µ¥¹ÌÁö/È÷Æ®¹Ú½º ÆÇÁ¤À» ¿©±â¿¡ ³Ö´Â´Ù.
+    /// Animation Event: íƒ€ê²© í”„ë ˆì„ì—ì„œ í˜¸ì¶œ. ì‹¤ì œ ë°ë¯¸ì§€/íˆíŠ¸ë°•ìŠ¤ íŒì •ì„ ì—¬ê¸°ì— ë„£ëŠ”ë‹¤.
     /// </summary>
     public void ExecuteAttackHit()
     {
         if (currentWeapon == null) return;
 
-        // TODO: ¹«±â »ç°Å¸®/°ø°İ·Â ±â¹İ È÷Æ® ÆÇÁ¤
-        // ¿¹) Physics2D.OverlapCircle / OverlapBox ·Î Àû Å½Áö ÈÄ currentWeapon.attackPower Àû¿ë
-        // float power = currentWeapon.attackPower;
-        // float range = currentWeapon.attackRange;
+        GetCurrentHitArea(out Vector2 hitCenter, out float radius);
+
+        int hitCount = Physics2D.OverlapCircleNonAlloc(hitCenter, radius, hitBuffer, hitLayers);
+        damagedTargets.Clear();
+
+        for (int i = 0; i < hitCount; i++)
+        {
+            Collider2D hitCollider = hitBuffer[i];
+            if (hitCollider == null) continue;
+
+            MonoBehaviour[] behaviours = hitCollider.GetComponentsInParent<MonoBehaviour>();
+            foreach (MonoBehaviour behaviour in behaviours)
+            {
+                IDamageable damageable = behaviour as IDamageable;
+                if (damageable == null) continue;
+                if (damagedTargets.Contains(behaviour)) continue;
+
+                Vector2 hitPoint = hitCollider.ClosestPoint(hitCenter);
+                damageable.TakeDamage(currentWeapon.attackPower, hitPoint, attackDirection);
+                damagedTargets.Add(behaviour);
+                break;
+            }
+        }
     }
 
     /// <summary>
-    /// Animation Event: ÇöÀç °ø°İ ¸ğ¼ÇÀÌ ³¡³ª´Â ¸¶Áö¸· ÇÁ·¹ÀÓ¿¡¼­ È£Ãâ.
-    /// ¹öÆÛµÈ ÀÔ·ÂÀÌ ÀÖÀ¸¸é ´ÙÀ½ ÄŞº¸·Î ÀÌ¾îÁö°í, ¾øÀ¸¸é ÄŞº¸ Á¾·á.
+    /// Animation Event: í˜„ì¬ ê³µê²© ëª¨ì…˜ì´ ëë‚˜ëŠ” ë§ˆì§€ë§‰ í”„ë ˆì„ì—ì„œ í˜¸ì¶œ.
+    /// ë²„í¼ëœ ì…ë ¥ì´ ìˆìœ¼ë©´ ë‹¤ìŒ ì½¤ë³´ë¡œ ì´ì–´ì§€ê³ , ì—†ìœ¼ë©´ ì½¤ë³´ ì¢…ë£Œ.
     /// </summary>
     public void OnAttackAnimationEnd()
     {
@@ -109,9 +208,9 @@ public class PlayerCombat : MonoBehaviour
         }
         else
         {
-            // ¸ğ¼ÇÀº ³¡³µÁö¸¸ À¯¿¹ ½Ã°£ µ¿¾È ÄŞº¸¸¦ À¯ÁöÇÒÁö °áÁ¤.
-            // ¿©±â¼­´Â ¸ğ¼Ç Á¾·á ½ÃÁ¡ºÎÅÍ À¯¿¹ Å¸ÀÌ¸Ó°¡ °è¼Ó µ¹µµ·Ï µĞ´Ù.
-            // (Áï½Ã ²÷°í ½ÍÀ¸¸é ¾Æ·¡ ResetCombo() È£Ãâ·Î ±³Ã¼)
+            // ëª¨ì…˜ì€ ëë‚¬ì§€ë§Œ ìœ ì˜ˆ ì‹œê°„ ë™ì•ˆ ì½¤ë³´ë¥¼ ìœ ì§€í• ì§€ ê²°ì •.
+            // ì—¬ê¸°ì„œëŠ” ëª¨ì…˜ ì¢…ë£Œ ì‹œì ë¶€í„° ìœ ì˜ˆ íƒ€ì´ë¨¸ê°€ ê³„ì† ëŒë„ë¡ ë‘”ë‹¤.
+            // (ì¦‰ì‹œ ëŠê³  ì‹¶ìœ¼ë©´ ì•„ë˜ ResetCombo() í˜¸ì¶œë¡œ êµì²´)
         }
     }
 
@@ -124,8 +223,76 @@ public class PlayerCombat : MonoBehaviour
         animator.speed = 1f;
         resetRoutine = null;
 
-        // °ø°İÀÌ ³¡³µÀ¸´Ï ÀÌµ¿/idle ½ºÇÁ¶óÀÌÆ® »óÅÂ¸¦ ´Ù½Ã ¸ÂÃçÁØ´Ù.
+        // ê³µê²©ì´ ëë‚¬ìœ¼ë‹ˆ ì´ë™/idle ìŠ¤í”„ë¼ì´íŠ¸ ìƒíƒœë¥¼ ë‹¤ì‹œ ë§ì¶°ì¤€ë‹¤.
         if (controller != null)
             controller.RefreshAfterAttack();
+    }
+
+    private void SetupRangePreview()
+    {
+        rangePreview = GetComponent<LineRenderer>();
+        if (rangePreview == null)
+            rangePreview = gameObject.AddComponent<LineRenderer>();
+
+        rangePreview.useWorldSpace = true;
+        rangePreview.loop = true;
+        rangePreview.positionCount = Mathf.Max(12, rangePreviewSegments);
+        rangePreview.startWidth = rangePreviewWidth;
+        rangePreview.endWidth = rangePreviewWidth;
+        rangePreview.startColor = rangePreviewColor;
+        rangePreview.endColor = rangePreviewColor;
+        rangePreview.material = new Material(Shader.Find("Sprites/Default"));
+        rangePreview.sortingOrder = 20;
+    }
+
+    private void UpdateRangePreview()
+    {
+        if (rangePreview == null) return;
+
+        bool shouldShow = showRangePreview && currentWeapon != null;
+        rangePreview.enabled = shouldShow;
+        if (!shouldShow) return;
+
+        GetCurrentHitArea(out Vector2 hitCenter, out float radius);
+
+        int segmentCount = Mathf.Max(12, rangePreviewSegments);
+        if (rangePreview.positionCount != segmentCount)
+            rangePreview.positionCount = segmentCount;
+
+        rangePreview.startWidth = rangePreviewWidth;
+        rangePreview.endWidth = rangePreviewWidth;
+        rangePreview.startColor = rangePreviewColor;
+        rangePreview.endColor = rangePreviewColor;
+
+        for (int i = 0; i < segmentCount; i++)
+        {
+            float angle = (float)i / segmentCount * Mathf.PI * 2f;
+            Vector3 point = new Vector3(
+                hitCenter.x + Mathf.Cos(angle) * radius,
+                hitCenter.y + Mathf.Sin(angle) * radius,
+                transform.position.z);
+            rangePreview.SetPosition(i, point);
+        }
+    }
+
+    private void GetCurrentHitArea(out Vector2 hitCenter, out float radius)
+    {
+        float range = currentWeapon != null
+            ? Mathf.Max(currentWeapon.attackRange, minimumHitRadius)
+            : minimumHitRadius;
+        radius = Mathf.Max(range * 0.5f, minimumHitRadius);
+        hitCenter = attackOrigin != null
+            ? (Vector2)attackOrigin.position
+            : (Vector2)transform.position + attackDirection * radius;
+    }
+
+    private void OnDrawGizmosSelected()
+    {
+        if (!showDebugHitArea) return;
+
+        GetCurrentHitArea(out Vector2 hitCenter, out float radius);
+
+        Gizmos.color = Color.red;
+        Gizmos.DrawWireSphere(hitCenter, radius);
     }
 }
