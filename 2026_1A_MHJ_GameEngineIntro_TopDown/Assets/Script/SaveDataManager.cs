@@ -9,6 +9,8 @@ public class SaveData
     public int bestDungeonLevel = 1;
     public int bestNodeIndex = 0;
     public int permanentCurrency = 0;
+    public int attackUpgradeLevel = 0;
+    public int healthUpgradeLevel = 0;
     public bool tutorialCompleted = false;
     public List<string> unlockedWeapons = new List<string>();
 }
@@ -65,16 +67,29 @@ public class SaveDataManager : MonoBehaviour
         {
             Data.bestDungeonLevel = dungeonLevel;
             Data.bestNodeIndex = nodeIndex;
+            Save();
             return;
         }
 
         if (dungeonLevel == Data.bestDungeonLevel && nodeIndex > Data.bestNodeIndex)
+        {
             Data.bestNodeIndex = nodeIndex;
+            Save();
+        }
     }
 
     public void AddCurrency(int amount)
     {
         Data.permanentCurrency = Mathf.Max(0, Data.permanentCurrency + amount);
+        Save();
+    }
+
+    public void SetPermanentProgress(int currency, int attackLevel, int healthLevel)
+    {
+        Data.permanentCurrency = Mathf.Max(0, currency);
+        Data.attackUpgradeLevel = Mathf.Max(0, attackLevel);
+        Data.healthUpgradeLevel = Mathf.Max(0, healthLevel);
+        Save();
     }
 
     public void SetTutorialCompleted(bool completed)

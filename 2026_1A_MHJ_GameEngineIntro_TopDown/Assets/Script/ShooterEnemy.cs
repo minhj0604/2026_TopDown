@@ -82,7 +82,7 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
     private void FixedUpdate()
     {
         if (!CanAct()) return;
-        if (IsDead || player == null || isTimeStopped || groggyTimer > 0f) return;
+        if (IsDead || player == null || isTimeStopped) return;
         if (shootRoutine != null) return;
 
         if (knockbackTimer > 0f)
@@ -90,6 +90,8 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
             rb.MovePosition(rb.position + knockbackVelocity * Time.fixedDeltaTime);
             return;
         }
+
+        if (groggyTimer > 0f) return;
 
         Vector2 currentPosition = rb.position;
         Vector2 playerPosition = player.position;
@@ -152,7 +154,6 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
         if (IsDead) return;
 
         groggyTimer = duration;
-        knockbackTimer = 0f;
         StopShootRoutine();
         rb.linearVelocity = Vector2.zero;
         RefreshColor();
@@ -223,7 +224,7 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
             return;
 
         knockbackTimer = knockbackTime;
-        knockbackVelocity = hitDirection.normalized * GetKnockbackForce();
+        knockbackVelocity = hitDirection.normalized * GetKnockbackForce() * Mathf.Max(1f, hitDirection.magnitude);
     }
 
     private void RefreshColor()

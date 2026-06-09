@@ -11,6 +11,9 @@ public class PlayerCombat : MonoBehaviour
     public WeaponData weaponSlot1;
     public WeaponData weaponSlot2;
     public WeaponData weaponSlot3;
+    [SerializeField] private WeaponData lobbyWeaponCandidate1;
+    [SerializeField] private WeaponData lobbyWeaponCandidate2;
+    [SerializeField] private WeaponData lobbyWeaponCandidate3;
 
     [Header("Clock Gauge")]
     [SerializeField] private ClockOutputSystem clockOutput;
@@ -43,9 +46,9 @@ public class PlayerCombat : MonoBehaviour
 
     [Header("Hitbox Flash")]
     [SerializeField] private bool showHitboxFlash = true;
-    [SerializeField] private Color hitboxFlashColor = new Color(1f, 0f, 0f, 0.9f);
+    [SerializeField] private Color hitboxFlashColor = new Color(1f, 0f, 0f, 1f);
     [SerializeField] private float hitboxFlashWidth = 0.06f;
-    [SerializeField] private float hitboxFlashTime = 0.2f;
+    [SerializeField] private float hitboxFlashTime = 0.08f;
 
     [Header("Hit Camera Shake")]
     [SerializeField] private bool shakeCameraOnHit = true;
@@ -59,13 +62,18 @@ public class PlayerCombat : MonoBehaviour
 
     private Animator animator;
     private PlayerController controller;
+    private PlayerPermanentProgress permanentProgress;
+    private Rigidbody2D rb;
     private int comboStep = 0;
     private bool isAttacking = false;
     private bool isInComboRecovery = false;
+    private bool isComboDelay = false;
     private bool bufferedInput = false;
     private bool hasExecutedHitThisAttack = false;
     private Coroutine resetRoutine;
     private Coroutine attackSafetyRoutine;
+    private Coroutine comboDelayRoutine;
+    private Coroutine lungeRoutine;
     private Vector2 attackDirection = Vector2.down;
     private int currentWeaponIndex = 0;
     private LineRenderer rangePreview;
@@ -75,6 +83,7 @@ public class PlayerCombat : MonoBehaviour
     private float queuedAttackTimer = 0f;
     private float hitboxFlashTimer = 0f;
     private int attackSerial = 0;
+    private WeaponData[] lobbyWeaponPool;
 
     private readonly Collider2D[] hitBuffer = new Collider2D[16];
     private readonly List<MonoBehaviour> damagedTargets = new List<MonoBehaviour>();
@@ -83,11 +92,14 @@ public class PlayerCombat : MonoBehaviour
     {
         animator = GetComponent<Animator>();
         controller = GetComponent<PlayerController>();
+        permanentProgress = GetComponent<PlayerPermanentProgress>();
+        rb = GetComponent<Rigidbody2D>();
         clockOutput = GetComponent<ClockOutputSystem>();
 
         if (weaponSlot1 == null)
             weaponSlot1 = currentWeapon;
 
+        SetupLobbyWeaponPool();
         EquipWeapon(0, false);
         SetupRangePreview();
     }
@@ -140,6 +152,13 @@ public class PlayerCombat : MonoBehaviour
         if (isInComboRecovery)
             return;
 
+        if (isComboDelay)
+        {
+            queuedAttackTimer = attackInputBufferTime;
+            bufferedInput = true;
+            return;
+        }
+
         if (isAttacking && comboStep >= GetCurrentMaxCombo())
         {
             bufferedInput = false;
@@ -157,7 +176,7 @@ public class PlayerCombat : MonoBehaviour
     private void ProcessQueuedAttack()
     {
         if (queuedAttackTimer <= 0f) return;
-        if (isInComboRecovery) return;
+        if (isInComboRecovery || isComboDelay) return;
         if (isAttacking)
         {
             bufferedInput = true;
@@ -170,13 +189,12 @@ public class PlayerCombat : MonoBehaviour
 
     private void StartNextCombo()
     {
-        if (currentWeapon != null && currentWeapon.attackSpeed > 0f)
-            animator.speed = currentWeapon.attackSpeed;
-
         comboStep++;
         int currentMaxCombo = GetCurrentMaxCombo();
         if (comboStep > currentMaxCombo)
             comboStep = 1;
+
+        animator.speed = GetCurrentAnimationSpeed();
 
         isAttacking = true;
         bufferedInput = false;
@@ -185,6 +203,7 @@ public class PlayerCombat : MonoBehaviour
 
         animator.SetInteger(comboStepParam, comboStep);
         animator.SetTrigger(attackTrigger);
+        StartAttackLunge();
 
         if (attackSafetyRoutine != null)
             StopCoroutine(attackSafetyRoutine);
@@ -223,6 +242,104 @@ public class PlayerCombat : MonoBehaviour
         return null;
     }
 
+    public void ApplyLobbyWeaponSlots(int firstWeaponIndex, int secondWeaponIndex)
+    {
+        if (isAttacking) return;
+        if (lobbyWeaponPool == null || lobbyWeaponPool.Length < 3) return;
+        if (firstWeaponIndex == secondWeaponIndex) return;
+        if (firstWeaponIndex < 0 || firstWeaponIndex >= lobbyWeaponPool.Length) return;
+        if (secondWeaponIndex < 0 || secondWeaponIndex >= lobbyWeaponPool.Length) return;
+
+        WeaponData firstWeapon = lobbyWeaponPool[firstWeaponIndex];
+        WeaponData secondWeapon = lobbyWeaponPool[secondWeaponIndex];
+        if (firstWeapon == null || secondWeapon == null) return;
+
+        weaponSlot1 = firstWeapon;
+        weaponSlot2 = secondWeapon;
+        currentWeapon = weaponSlot1;
+        currentWeaponIndex = 0;
+        animator.speed = 1f;
+        ResetCombo(true);
+    }
+
+    public void SetLobbyWeaponSlot(int loadoutSlot, int weaponIndex)
+    {
+        if (lobbyWeaponPool == null || lobbyWeaponPool.Length < 3) return;
+        if (weaponIndex < 0 || weaponIndex >= lobbyWeaponPool.Length) return;
+        WeaponData selectedWeapon = lobbyWeaponPool[weaponIndex];
+        if (selectedWeapon == null) return;
+
+        WeaponData otherSlotWeapon = loadoutSlot == 1 ? weaponSlot2 : weaponSlot1;
+        if (otherSlotWeapon == selectedWeapon)
+        {
+            for (int i = 0; i < lobbyWeaponPool.Length; i++)
+            {
+                WeaponData replacement = lobbyWeaponPool[i];
+                if (replacement == null || replacement == selectedWeapon) continue;
+                otherSlotWeapon = replacement;
+                break;
+            }
+        }
+
+        if (loadoutSlot == 1)
+        {
+            weaponSlot1 = selectedWeapon;
+            weaponSlot2 = otherSlotWeapon;
+        }
+        else if (loadoutSlot == 2)
+        {
+            weaponSlot1 = otherSlotWeapon;
+            weaponSlot2 = selectedWeapon;
+        }
+        else
+        {
+            return;
+        }
+
+        currentWeapon = loadoutSlot == 1 ? weaponSlot1 : weaponSlot2;
+        currentWeaponIndex = loadoutSlot - 1;
+        animator.speed = 1f;
+        ResetCombo(true);
+    }
+
+    public WeaponData GetLobbyWeaponCandidate(int weaponIndex)
+    {
+        if (lobbyWeaponPool == null) return null;
+        if (weaponIndex < 0 || weaponIndex >= lobbyWeaponPool.Length) return null;
+        return lobbyWeaponPool[weaponIndex];
+    }
+
+    public int GetLobbyWeaponSlotIndex(int loadoutSlot)
+    {
+        WeaponData equippedWeapon = loadoutSlot == 1 ? weaponSlot1 : weaponSlot2;
+        return FindCandidateIndex(equippedWeapon, loadoutSlot == 1 ? 0 : 1);
+    }
+
+    private void SetupLobbyWeaponPool()
+    {
+        if (lobbyWeaponCandidate1 == null)
+            lobbyWeaponCandidate1 = weaponSlot1;
+        if (lobbyWeaponCandidate2 == null)
+            lobbyWeaponCandidate2 = weaponSlot2;
+        if (lobbyWeaponCandidate3 == null)
+            lobbyWeaponCandidate3 = weaponSlot3;
+
+        lobbyWeaponPool = new WeaponData[] { lobbyWeaponCandidate1, lobbyWeaponCandidate2, lobbyWeaponCandidate3 };
+    }
+
+    private int FindCandidateIndex(WeaponData weapon, int fallbackIndex)
+    {
+        if (lobbyWeaponPool == null) return fallbackIndex;
+
+        for (int i = 0; i < lobbyWeaponPool.Length; i++)
+        {
+            if (lobbyWeaponPool[i] == weapon)
+                return i;
+        }
+
+        return Mathf.Clamp(fallbackIndex, 0, lobbyWeaponPool.Length - 1);
+    }
+
     private IEnumerator ComboResetTimer()
     {
         yield return new WaitForSeconds(comboResetTime);
@@ -231,9 +348,7 @@ public class PlayerCombat : MonoBehaviour
 
     private IEnumerator AttackSafetyTimer(int expectedAttackSerial)
     {
-        float speed = currentWeapon != null && currentWeapon.attackSpeed > 0f
-            ? currentWeapon.attackSpeed
-            : 1f;
+        float speed = GetCurrentAnimationSpeed();
         float backupTime = Mathf.Min(attackSafetyTime, attackEndBackupTime);
         yield return new WaitForSeconds(backupTime / speed);
 
@@ -273,7 +388,8 @@ public class PlayerCombat : MonoBehaviour
                 if (damagedTargets.Contains(behaviour)) continue;
 
                 Vector2 hitPoint = hitCollider.ClosestPoint(hitCenter);
-                damageable.TakeDamage(currentWeapon.attackPower, hitPoint, attackDirection);
+                damageable.TakeDamage(GetCurrentAttackPower(), hitPoint, attackDirection * GetCurrentKnockbackMultiplier());
+                ApplyShortGroggy(behaviour);
                 damagedTargets.Add(behaviour);
                 break;
             }
@@ -308,16 +424,10 @@ public class PlayerCombat : MonoBehaviour
         {
             StartCoroutine(ComboEndRecoveryRoutine());
         }
-        else if (bufferedInput)
-        {
-            queuedAttackTimer = 0f;
-            isAttacking = false;
-            StartNextCombo();
-        }
         else
         {
             isAttacking = false;
-            StartComboResetTimer();
+            StartComboDelay();
         }
     }
 
@@ -332,6 +442,7 @@ public class PlayerCombat : MonoBehaviour
     {
         isAttacking = false;
         isInComboRecovery = true;
+        isComboDelay = false;
         bufferedInput = false;
         hasExecutedHitThisAttack = false;
         animator.speed = 1f;
@@ -346,6 +457,11 @@ public class PlayerCombat : MonoBehaviour
             StopCoroutine(attackSafetyRoutine);
             attackSafetyRoutine = null;
         }
+        if (comboDelayRoutine != null)
+        {
+            StopCoroutine(comboDelayRoutine);
+            comboDelayRoutine = null;
+        }
 
         if (controller != null)
             controller.RefreshAfterAttack();
@@ -359,6 +475,7 @@ public class PlayerCombat : MonoBehaviour
         comboStep = 0;
         isAttacking = false;
         isInComboRecovery = false;
+        isComboDelay = false;
         bufferedInput = false;
         hasExecutedHitThisAttack = false;
         if (clearQueuedAttack)
@@ -372,6 +489,16 @@ public class PlayerCombat : MonoBehaviour
         {
             StopCoroutine(attackSafetyRoutine);
             attackSafetyRoutine = null;
+        }
+        if (comboDelayRoutine != null)
+        {
+            StopCoroutine(comboDelayRoutine);
+            comboDelayRoutine = null;
+        }
+        if (lungeRoutine != null)
+        {
+            StopCoroutine(lungeRoutine);
+            lungeRoutine = null;
         }
 
         if (controller != null)
@@ -387,26 +514,149 @@ public class PlayerCombat : MonoBehaviour
         return Mathf.Min(weaponComboCount, animatorComboStateCount);
     }
 
+    private float GetCurrentAnimationSpeed()
+    {
+        if (currentWeapon == null || currentWeapon.attackSpeed <= 0f)
+            return 1f;
+
+        return currentWeapon.attackSpeed * currentWeapon.GetComboSpeedMultiplier(comboStep);
+    }
+
+    private float GetCurrentAttackPower()
+    {
+        float attackPower = currentWeapon != null ? currentWeapon.attackPower : 0f;
+        if (currentWeapon != null)
+            attackPower *= currentWeapon.GetComboDamageMultiplier(comboStep);
+        if (permanentProgress != null)
+            attackPower *= permanentProgress.AttackDamageMultiplier;
+
+        return attackPower;
+    }
+
+    private float GetCurrentKnockbackMultiplier()
+    {
+        return currentWeapon != null ? currentWeapon.GetComboKnockbackMultiplier(comboStep) : 1f;
+    }
+
+    private float GetCurrentGroggyTime()
+    {
+        return currentWeapon != null ? currentWeapon.GetComboGroggyTime(comboStep) : 0.06f;
+    }
+
+    private float GetCurrentComboDelay()
+    {
+        return currentWeapon != null ? currentWeapon.GetComboDelay(comboStep) : 0.12f;
+    }
+
+    private float GetCurrentLungeDistance()
+    {
+        return currentWeapon != null ? currentWeapon.GetComboLungeDistance(comboStep) : 0.08f;
+    }
+
+    private float GetCurrentLungeTime()
+    {
+        return currentWeapon != null ? currentWeapon.GetComboLungeTime(comboStep) : 0.08f;
+    }
+
+    private void StartComboDelay()
+    {
+        if (comboDelayRoutine != null)
+            StopCoroutine(comboDelayRoutine);
+
+        comboDelayRoutine = StartCoroutine(ComboDelayRoutine());
+    }
+
+    private IEnumerator ComboDelayRoutine()
+    {
+        isComboDelay = true;
+        bufferedInput = true;
+        yield return new WaitForSeconds(GetCurrentComboDelay());
+
+        isComboDelay = false;
+        comboDelayRoutine = null;
+
+        if (queuedAttackTimer > 0f)
+        {
+            queuedAttackTimer = 0f;
+            StartNextCombo();
+        }
+        else
+        {
+            StartComboResetTimer();
+        }
+    }
+
+    private void StartAttackLunge()
+    {
+        if (rb == null) return;
+
+        float distance = GetCurrentLungeDistance();
+        if (distance <= 0f) return;
+
+        if (lungeRoutine != null)
+            StopCoroutine(lungeRoutine);
+        lungeRoutine = StartCoroutine(AttackLungeRoutine(distance, GetCurrentLungeTime()));
+    }
+
+    private IEnumerator AttackLungeRoutine(float distance, float duration)
+    {
+        Vector2 startPosition = rb.position;
+        Vector2 targetPosition = startPosition + attackDirection.normalized * distance;
+        float timer = 0f;
+
+        while (timer < duration)
+        {
+            timer += Time.deltaTime;
+            float t = Mathf.Clamp01(timer / duration);
+            rb.MovePosition(Vector2.Lerp(startPosition, targetPosition, t));
+            yield return null;
+        }
+
+        lungeRoutine = null;
+    }
+
+    private void ApplyShortGroggy(MonoBehaviour hitBehaviour)
+    {
+        IEnemyStatusReceiver statusReceiver = hitBehaviour as IEnemyStatusReceiver;
+        if (statusReceiver == null) return;
+
+        float groggyTime = GetCurrentGroggyTime();
+        if (groggyTime > 0f)
+            statusReceiver.ApplyGroggy(groggyTime);
+    }
+
     private void SetupRangePreview()
     {
-        rangePreview = GetComponent<LineRenderer>();
-        if (rangePreview == null)
-            rangePreview = gameObject.AddComponent<LineRenderer>();
+        LineRenderer legacyRenderer = GetComponent<LineRenderer>();
+        if (legacyRenderer != null)
+            legacyRenderer.enabled = false;
 
+        rangePreview = CreateChildLineRenderer("AttackRangePreview");
         SetupCircleRenderer(rangePreview, rangePreviewColor, rangePreviewWidth, 20);
         rangePreview.enabled = false;
 
-        hitboxFlash = gameObject.AddComponent<LineRenderer>();
+        hitboxFlash = CreateChildLineRenderer("AttackHitboxFlash");
         SetupCircleRenderer(hitboxFlash, hitboxFlashColor, hitboxFlashWidth, 25);
         hitboxFlash.enabled = false;
 
-        GameObject flashObject = new GameObject("HitboxFlash");
-        flashObject.transform.SetParent(transform);
-        hitboxFlashSprite = flashObject.AddComponent<SpriteRenderer>();
-        hitboxFlashSprite.sprite = CreateCircleSprite();
-        hitboxFlashSprite.color = new Color(hitboxFlashColor.r, hitboxFlashColor.g, hitboxFlashColor.b, 0.35f);
-        hitboxFlashSprite.sortingOrder = 100;
-        hitboxFlashSprite.enabled = false;
+        EnsureHitboxFlashSprite();
+    }
+
+    private LineRenderer CreateChildLineRenderer(string objectName)
+    {
+        Transform existingChild = transform.Find(objectName);
+        GameObject rendererObject = existingChild != null
+            ? existingChild.gameObject
+            : new GameObject(objectName);
+
+        rendererObject.transform.SetParent(transform);
+        rendererObject.transform.localPosition = Vector3.zero;
+
+        LineRenderer renderer = rendererObject.GetComponent<LineRenderer>();
+        if (renderer == null)
+            renderer = rendererObject.AddComponent<LineRenderer>();
+
+        return renderer;
     }
 
     private void SetupCircleRenderer(LineRenderer renderer, Color color, float width, int sortingOrder)
@@ -426,7 +676,7 @@ public class PlayerCombat : MonoBehaviour
     {
         if (rangePreview == null) return;
 
-        bool shouldShow = showRangePreview && currentWeapon != null;
+        bool shouldShow = showRangePreview && currentWeapon != null && isAttacking;
         rangePreview.enabled = shouldShow;
         if (!shouldShow) return;
 
@@ -436,31 +686,60 @@ public class PlayerCombat : MonoBehaviour
 
     private void ShowHitboxFlash(Vector2 hitCenter, float radius)
     {
-        if (!showHitboxFlash || hitboxFlash == null) return;
+        if (!showHitboxFlash) return;
 
-        DrawCircle(hitboxFlash, hitCenter, radius, hitboxFlashColor, hitboxFlashWidth);
+        if (hitboxFlash != null)
+        {
+            DrawCircle(hitboxFlash, hitCenter, radius, hitboxFlashColor, hitboxFlashWidth);
+            hitboxFlash.enabled = true;
+        }
+
         ShowHitboxFlashSprite(hitCenter, radius);
         hitboxFlashTimer = hitboxFlashTime;
-        hitboxFlash.enabled = true;
     }
 
     private void ShowHitboxFlashSprite(Vector2 hitCenter, float radius)
     {
+        EnsureHitboxFlashSprite();
         if (hitboxFlashSprite == null) return;
 
-        hitboxFlashSprite.transform.position = new Vector3(hitCenter.x, hitCenter.y, transform.position.z);
+        hitboxFlashSprite.transform.position = new Vector3(hitCenter.x, hitCenter.y, -1f);
         hitboxFlashSprite.transform.localScale = Vector3.one * radius * 2f;
         hitboxFlashSprite.enabled = true;
     }
 
+    private void EnsureHitboxFlashSprite()
+    {
+        if (hitboxFlashSprite != null) return;
+
+        GameObject flashObject = new GameObject("HitboxFlash");
+        flashObject.transform.SetParent(transform);
+        hitboxFlashSprite = flashObject.AddComponent<SpriteRenderer>();
+        hitboxFlashSprite.sprite = CreateCircleSprite();
+        hitboxFlashSprite.color = new Color(hitboxFlashColor.r, hitboxFlashColor.g, hitboxFlashColor.b, 0.75f);
+        hitboxFlashSprite.sortingLayerName = "Default";
+        hitboxFlashSprite.sortingOrder = 1000;
+        hitboxFlashSprite.enabled = false;
+    }
+
     private void UpdateHitboxFlashTimer()
     {
-        if (hitboxFlashTimer <= 0f) return;
+        if (hitboxFlashTimer <= 0f)
+        {
+            HideHitboxFlash();
+            return;
+        }
 
         hitboxFlashTimer -= Time.deltaTime;
-        if (hitboxFlashTimer <= 0f && hitboxFlash != null)
+        if (hitboxFlashTimer <= 0f)
+            HideHitboxFlash();
+    }
+
+    private void HideHitboxFlash()
+    {
+        if (hitboxFlash != null)
             hitboxFlash.enabled = false;
-        if (hitboxFlashTimer <= 0f && hitboxFlashSprite != null)
+        if (hitboxFlashSprite != null)
             hitboxFlashSprite.enabled = false;
     }
 
@@ -489,7 +768,7 @@ public class PlayerCombat : MonoBehaviour
     private void GetCurrentHitArea(out Vector2 hitCenter, out float radius)
     {
         float range = currentWeapon != null
-            ? Mathf.Max(currentWeapon.attackRange, minimumHitRadius)
+            ? Mathf.Max(currentWeapon.attackRange * currentWeapon.GetComboRangeMultiplier(comboStep), minimumHitRadius)
             : minimumHitRadius;
         radius = Mathf.Max(range * 0.5f, minimumHitRadius);
         hitCenter = attackOrigin != null
@@ -516,7 +795,7 @@ public class PlayerCombat : MonoBehaviour
 
                 if (distance <= radius)
                 {
-                    float alpha = distance >= outlineRadius ? 1f : 0.45f;
+                    float alpha = distance >= outlineRadius ? 1f : 0.65f;
                     pixel = new Color(1f, 0f, 0f, alpha);
                 }
 

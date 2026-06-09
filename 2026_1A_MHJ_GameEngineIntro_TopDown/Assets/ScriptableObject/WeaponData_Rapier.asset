@@ -15,10 +15,43 @@ MonoBehaviour:
   weaponName: "\uB808\uC774\uD53C\uC5B4"
   icon: {fileID: 0}
   description: 
-  attackPower: 10
-  attackSpeed: 1.1
-  attackRange: 0.62
+  attackPower: 9
+  attackSpeed: 1.2
+  attackRange: 0.56
   comboCount: 4
+  comboSteps:
+  - damageMultiplier: 1
+    speedMultiplier: 1
+    rangeMultiplier: 1
+    knockbackMultiplier: 0.9
+    groggyTime: 0.05
+    comboDelay: 0.18
+    lungeDistance: 0.11
+    lungeTime: 0.07
+  - damageMultiplier: 1
+    speedMultiplier: 1.05
+    rangeMultiplier: 1.05
+    knockbackMultiplier: 0.9
+    groggyTime: 0.05
+    comboDelay: 0.18
+    lungeDistance: 0.12
+    lungeTime: 0.07
+  - damageMultiplier: 0.8
+    speedMultiplier: 1.45
+    rangeMultiplier: 1.05
+    knockbackMultiplier: 0.8
+    groggyTime: 0.04
+    comboDelay: 0.2
+    lungeDistance: 0.13
+    lungeTime: 0.06
+  - damageMultiplier: 1.45
+    speedMultiplier: 0.95
+    rangeMultiplier: 1.2
+    knockbackMultiplier: 1.5
+    groggyTime: 0.12
+    comboDelay: 0.3
+    lungeDistance: 0.2
+    lungeTime: 0.095
   watchSkillType: 1
   gaugeCost: 25
   weaponPrefab: {fileID: 0}

@@ -11,6 +11,19 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
     [SerializeField] private Color groggyColor = new Color(1f, 0.9f, 0.2f, 1f);
     [SerializeField] private float hitFlashTime = 0.08f;
     [SerializeField] private float knockbackTime = 0.12f;
+    [SerializeField] private float contactDamageCenterDistance = 0.38f;
+
+    [Header("Chase")]
+    [SerializeField] private float detectRange = 2.2f;
+    [SerializeField] private float loseRange = 3.2f;
+    [SerializeField] private float separationRange = 0.85f;
+    [SerializeField] private float separationPower = 1.35f;
+
+    [Header("Wander")]
+    [SerializeField] private float wanderRadius = 1.4f;
+    [SerializeField] private float wanderInterval = 1.8f;
+    [SerializeField] private float wanderSpeedMultiplier = 0.45f;
+    [SerializeField] private float wanderArriveDistance = 0.12f;
 
     public bool IsDead => currentHealth <= 0f;
 
@@ -26,6 +39,10 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
     private float groggyTimer;
     private float knockbackTimer;
     private Vector2 knockbackVelocity;
+    private Vector2 spawnPosition;
+    private Vector2 wanderTarget;
+    private float wanderTimer;
+    private bool isChasing;
     private bool isTimeStopped;
     private Color normalColor = Color.white;
 
@@ -41,6 +58,8 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
         BoxCollider2D boxCollider = GetComponent<BoxCollider2D>();
         boxCollider.isTrigger = true;
         boxCollider.size = new Vector2(0.45f, 0.45f);
+
+        ClampChaseSettings();
 
         PlayerHealth playerHealth = FindFirstObjectByType<PlayerHealth>();
         if (playerHealth != null)
@@ -80,7 +99,7 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
     private void FixedUpdate()
     {
         if (!CanAct()) return;
-        if (IsDead || player == null || isTimeStopped || groggyTimer > 0f) return;
+        if (IsDead || player == null || isTimeStopped) return;
 
         if (knockbackTimer > 0f)
         {
@@ -88,10 +107,21 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
             return;
         }
 
+        if (groggyTimer > 0f) return;
+
         Vector2 currentPosition = rb.position;
-        Vector2 targetPosition = player.position;
-        Vector2 direction = (targetPosition - currentPosition).normalized;
-        rb.MovePosition(currentPosition + direction * GetMoveSpeed() * Time.fixedDeltaTime);
+        Vector2 playerPosition = player.position;
+        float playerDistance = Vector2.Distance(currentPosition, playerPosition);
+
+        if (!isChasing && playerDistance <= detectRange)
+            isChasing = true;
+        else if (isChasing && playerDistance >= loseRange)
+            isChasing = false;
+
+        if (isChasing)
+            MoveToward(playerPosition, GetMoveSpeed(), true);
+        else
+            Wander();
     }
 
     private void OnTriggerStay2D(Collider2D other)
@@ -101,6 +131,9 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
 
         PlayerHealth playerHealth = other.GetComponent<PlayerHealth>();
         if (playerHealth == null) return;
+
+        if (Vector2.Distance(rb.position, playerHealth.transform.position) > contactDamageCenterDistance)
+            return;
 
         Vector2 hitDirection = ((Vector2)playerHealth.transform.position - rb.position).normalized;
         playerHealth.TakeDamage(GetContactDamage(), hitDirection);
@@ -134,9 +167,13 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
         groggyTimer = 0f;
         knockbackTimer = 0f;
         knockbackVelocity = Vector2.zero;
+        spawnPosition = rb.position;
+        wanderTimer = 0f;
+        isChasing = false;
         isTimeStopped = false;
         rb.simulated = true;
         rb.linearVelocity = Vector2.zero;
+        PickNewWanderTarget();
         ApplyData();
     }
 
@@ -154,7 +191,6 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
         if (IsDead) return;
 
         groggyTimer = duration;
-        knockbackTimer = 0f;
         rb.linearVelocity = Vector2.zero;
         RefreshColor();
     }
@@ -199,7 +235,72 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
             return;
 
         knockbackTimer = knockbackTime;
-        knockbackVelocity = hitDirection.normalized * GetKnockbackForce();
+        knockbackVelocity = hitDirection.normalized * GetKnockbackForce() * Mathf.Max(1f, hitDirection.magnitude);
+    }
+
+    private void Wander()
+    {
+        wanderTimer -= Time.fixedDeltaTime;
+        if (wanderTimer <= 0f || Vector2.Distance(rb.position, wanderTarget) <= wanderArriveDistance)
+            PickNewWanderTarget();
+
+        MoveToward(wanderTarget, GetMoveSpeed() * wanderSpeedMultiplier, false);
+    }
+
+    private void PickNewWanderTarget()
+    {
+        wanderTimer = wanderInterval + UnityEngine.Random.Range(-0.35f, 0.35f);
+        Vector2 randomOffset = UnityEngine.Random.insideUnitCircle * wanderRadius;
+        wanderTarget = spawnPosition + randomOffset;
+    }
+
+    private void MoveToward(Vector2 targetPosition, float moveSpeed, bool useSeparation)
+    {
+        Vector2 direction = targetPosition - rb.position;
+        if (direction.sqrMagnitude <= 0.0025f)
+            return;
+
+        direction.Normalize();
+        if (useSeparation)
+        {
+            Vector2 separation = GetSeparationDirection();
+            direction = (direction + separation * separationPower).normalized;
+        }
+
+        rb.MovePosition(rb.position + direction * moveSpeed * Time.fixedDeltaTime);
+    }
+
+    private Vector2 GetSeparationDirection()
+    {
+        Vector2 separation = Vector2.zero;
+        ChaserEnemy[] chasers = FindObjectsByType<ChaserEnemy>(FindObjectsSortMode.None);
+
+        foreach (ChaserEnemy other in chasers)
+        {
+            if (other == null || other == this || other.IsDead) continue;
+
+            Vector2 away = rb.position - other.rb.position;
+            float distance = away.magnitude;
+            if (distance > separationRange) continue;
+            if (distance <= 0.001f)
+            {
+                float angle = (GetInstanceID() % 360) * Mathf.Deg2Rad;
+                away = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+                distance = 0.001f;
+            }
+
+            separation += away.normalized * (1f - distance / separationRange);
+        }
+
+        return separation;
+    }
+
+    private void ClampChaseSettings()
+    {
+        detectRange = Mathf.Clamp(detectRange, 0.8f, 2.2f);
+        loseRange = Mathf.Clamp(loseRange, detectRange + 0.4f, 3.2f);
+        separationRange = Mathf.Clamp(separationRange, 0.5f, 1.0f);
+        separationPower = Mathf.Clamp(separationPower, 0.8f, 1.8f);
     }
 
     private void RefreshColor()

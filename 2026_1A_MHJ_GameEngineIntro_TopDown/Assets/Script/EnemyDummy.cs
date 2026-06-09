@@ -89,7 +89,7 @@ public class EnemyDummy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusRe
         currentHealth = Mathf.Max(0f, currentHealth - damage);
 
         if (hitDirection.sqrMagnitude > 0.01f)
-            rb.AddForce(hitDirection.normalized * knockbackForce, ForceMode2D.Impulse);
+            rb.AddForce(hitDirection.normalized * knockbackForce * Mathf.Max(1f, hitDirection.magnitude), ForceMode2D.Impulse);
 
         if (flashRoutine != null)
             StopCoroutine(flashRoutine);

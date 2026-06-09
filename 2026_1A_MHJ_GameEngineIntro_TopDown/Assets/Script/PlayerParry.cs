@@ -33,7 +33,7 @@ public class PlayerParry : MonoBehaviour
         {
             counterReadyTimer = counterReadyTime;
             if (clockOutput != null)
-                clockOutput.GainFromDodge();
+                clockOutput.GainFromParry();
             StartCoroutine(SlowRoutine());
             Debug.Log("Parry Success.", this);
         }

@@ -13,6 +13,7 @@ public class ChargerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
     [SerializeField] private Color groggyColor = new Color(1f, 0.9f, 0.2f, 1f);
     [SerializeField] private float hitFlashTime = 0.08f;
     [SerializeField] private float knockbackTime = 0.12f;
+    [SerializeField] private float contactDamageCenterDistance = 0.38f;
 
     public bool IsDead => currentHealth <= 0f;
 
@@ -85,13 +86,15 @@ public class ChargerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
     private void FixedUpdate()
     {
         if (!CanAct()) return;
-        if (IsDead || player == null || isTimeStopped || groggyTimer > 0f) return;
+        if (IsDead || player == null || isTimeStopped) return;
 
         if (knockbackTimer > 0f)
         {
             rb.MovePosition(rb.position + knockbackVelocity * Time.fixedDeltaTime);
             return;
         }
+
+        if (groggyTimer > 0f) return;
 
         if (chargeRoutine != null) return;
 
@@ -112,6 +115,9 @@ public class ChargerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
 
         PlayerHealth playerHealth = other.GetComponent<PlayerHealth>();
         if (playerHealth == null) return;
+
+        if (Vector2.Distance(rb.position, playerHealth.transform.position) > contactDamageCenterDistance)
+            return;
 
         Vector2 hitDirection = ((Vector2)playerHealth.transform.position - rb.position).normalized;
         playerHealth.TakeDamage(enemyData != null ? enemyData.contactDamage : 10f, hitDirection);
@@ -167,7 +173,6 @@ public class ChargerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
         if (IsDead) return;
 
         groggyTimer = duration;
-        knockbackTimer = 0f;
         StopCharge();
         rb.linearVelocity = Vector2.zero;
         RefreshColor();
@@ -240,7 +245,7 @@ public class ChargerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
 
         StopCharge();
         knockbackTimer = knockbackTime;
-        knockbackVelocity = hitDirection.normalized * GetKnockbackForce();
+        knockbackVelocity = hitDirection.normalized * GetKnockbackForce() * Mathf.Max(1f, hitDirection.magnitude);
     }
 
     private void RefreshColor()

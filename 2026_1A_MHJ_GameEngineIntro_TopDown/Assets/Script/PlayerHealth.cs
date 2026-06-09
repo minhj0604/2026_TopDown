@@ -1,10 +1,12 @@
 using UnityEngine;
+using System.Collections;
 
 public class PlayerHealth : MonoBehaviour
 {
     [SerializeField] private float maxHealth = 100f;
     [SerializeField] private float hurtInvincibleTime = 0.45f;
     [SerializeField] private float hurtKnockbackDistance = 0.18f;
+    [SerializeField] private float deathReturnDelay = 0.6f;
     [SerializeField] private Color hurtColor = new Color(1f, 0.35f, 0.35f, 1f);
     [SerializeField] private bool showDebugUI = true;
 
@@ -12,12 +14,14 @@ public class PlayerHealth : MonoBehaviour
     public float MaxHealth => maxHealth;
     public bool IsDead => currentHealth <= 0f;
     public bool IsInvincible => invincibleTimer > 0f;
+    public bool IsFullHealth => currentHealth >= maxHealth;
 
     private float currentHealth;
     private float invincibleTimer;
     private SpriteRenderer spriteRenderer;
     private Rigidbody2D rb;
     private Color normalColor = Color.white;
+    private bool isReturningToLobby;
 
     private void Awake()
     {
@@ -49,9 +53,15 @@ public class PlayerHealth : MonoBehaviour
         if (IsDead || IsInvincible) return;
 
         currentHealth = Mathf.Max(0f, currentHealth - damage);
+        ClockOutputSystem clockOutput = GetComponent<ClockOutputSystem>();
+        if (clockOutput != null)
+            clockOutput.BreakStyleChain();
         MakeInvincible(hurtInvincibleTime);
         ApplyHitReaction(hitDirection);
         Debug.Log($"Player hit: -{damage} HP ({currentHealth}/{maxHealth})", this);
+
+        if (IsDead && !isReturningToLobby)
+            StartCoroutine(ReturnToLobbyAfterDeath());
     }
 
     public void Heal(float amount)
@@ -60,10 +70,25 @@ public class PlayerHealth : MonoBehaviour
         currentHealth = Mathf.Min(maxHealth, currentHealth + amount);
     }
 
+    public bool TryHeal(float amount)
+    {
+        if (IsDead || IsFullHealth) return false;
+        Heal(amount);
+        return true;
+    }
+
+    public void IncreaseMaxHealth(float amount)
+    {
+        if (amount <= 0f) return;
+        maxHealth += amount;
+        currentHealth = maxHealth;
+    }
+
     public void ResetHealth()
     {
         currentHealth = maxHealth;
         invincibleTimer = 0f;
+        isReturningToLobby = false;
         if (spriteRenderer != null)
             spriteRenderer.color = normalColor;
     }
@@ -82,6 +107,32 @@ public class PlayerHealth : MonoBehaviour
             return;
 
         rb.MovePosition(rb.position + hitDirection.normalized * hurtKnockbackDistance);
+    }
+
+    private IEnumerator ReturnToLobbyAfterDeath()
+    {
+        isReturningToLobby = true;
+        yield return new WaitForSeconds(deathReturnDelay);
+
+        DungeonRunManager dungeonRunManager = FindFirstObjectByType<DungeonRunManager>();
+        if (dungeonRunManager != null)
+            dungeonRunManager.EndRunByDeath();
+
+        MoveToLobbySpawn();
+        ResetHealth();
+    }
+
+    private void MoveToLobbySpawn()
+    {
+        Vector2 spawnPosition = Vector2.zero;
+        LobbySpawnPoint lobbySpawnPoint = FindFirstObjectByType<LobbySpawnPoint>();
+        if (lobbySpawnPoint != null)
+            spawnPosition = lobbySpawnPoint.transform.position;
+
+        if (rb != null)
+            rb.position = spawnPosition;
+        else
+            transform.position = new Vector3(spawnPosition.x, spawnPosition.y, transform.position.z);
     }
 
     private void OnGUI()

@@ -14,12 +14,19 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   stageId: test_dungeon
   stageName: Test Dungeon
-  nodesPerDungeon: 5
+  nodesPerDungeon: 15
+  fixedShopNodeIndex: 14
+  fixedBossNodeIndex: 15
   firstNode: {fileID: 11400000, guid: b0cbe29b3ae04695ad79b516e0ce07f2, type: 2}
+  shopNode: {fileID: 11400000, guid: ae82f332de284616b4674d7b3d5ea75d, type: 2}
   bossNode: {fileID: 11400000, guid: 7584b82ec87a4c158ad2ba4a126428ee, type: 2}
   randomNodePool:
   - {fileID: 11400000, guid: b0cbe29b3ae04695ad79b516e0ce07f2, type: 2}
   - {fileID: 11400000, guid: b0cbe29b3ae04695ad79b516e0ce07f2, type: 2}
   - {fileID: 11400000, guid: 4db58deea0424be6ae193ef4b0f73c24, type: 2}
-  - {fileID: 11400000, guid: ae82f332de284616b4674d7b3d5ea75d, type: 2}
   - {fileID: 11400000, guid: d7a3331ae1e14602874eeedbbcd1195a, type: 2}
+  battleRoomModules: []
+  eliteRoomModules: []
+  shopRoomModules: []
+  eventRoomModules: []
+  bossRoomModules: []
