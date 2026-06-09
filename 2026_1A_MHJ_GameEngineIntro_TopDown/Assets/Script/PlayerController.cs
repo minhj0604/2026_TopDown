@@ -122,8 +122,6 @@ public class PlayerController : MonoBehaviour
     private void FixedUpdate()
     {
         // 공격 중에는 이동 잠금
-        if (IsAttacking) return;
-
         rb.MovePosition(rb.position + velocity * Time.fixedDeltaTime);
     }
 

@@ -225,7 +225,7 @@ Camera:
   far clip plane: 1000
   field of view: 34
   orthographic: 1
-  orthographic size: 1
+  orthographic size: 1.3
   m_Depth: -1
   m_CullingMask:
     serializedVersion: 2
@@ -9580,6 +9580,7 @@ MonoBehaviour:
   comboResetTime: 0.8
   comboEndRecoveryTime: 0.35
   attackSafetyTime: 1.2
+  attackInputBufferTime: 0.45
   attackTrigger: Attack
   comboStepParam: ComboStep
   attackOrigin: {fileID: 0}
@@ -9696,21 +9697,6 @@ MonoBehaviour:
   justDodgeCheckRange: 0.9
   successSlowScale: 0.35
   successSlowTime: 0.18
---- !u!114 &1421788128
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1421788115}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 36a68fa8a9594b858d99a57d857c482f, type: 3}
-  m_Name: ''
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerHealth
-  maxHealth: 100
-  hurtInvincibleTime: 0.45
-  showDebugUI: 1
 --- !u!114 &1421788126
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -9747,6 +9733,23 @@ MonoBehaviour:
   counterReadyTime: 1
   successSlowScale: 0.35
   successSlowTime: 0.18
+--- !u!114 &1421788128
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1421788115}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 36a68fa8a9594b858d99a57d857c482f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerHealth
+  maxHealth: 100
+  hurtInvincibleTime: 0.45
+  hurtKnockbackDistance: 0.18
+  hurtColor: {r: 1, g: 0.35, b: 0.35, a: 1}
+  showDebugUI: 1
 --- !u!1001 &1483318681
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -10132,7 +10135,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: -1.4, y: -1.1, z: 0}
-  m_LocalScale: {x: 0.7, y: 0.7, z: 1}
+  m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -10267,7 +10270,7 @@ BoxCollider2D:
     drawMode: 0
     adaptiveTiling: 0
   m_AutoTiling: 0
-  m_Size: {x: 0.65, y: 0.65}
+  m_Size: {x: 0.45, y: 0.45}
   m_EdgeRadius: 0
 --- !u!114 &1800000105
 MonoBehaviour:
@@ -10286,6 +10289,7 @@ MonoBehaviour:
   timeStopColor: {r: 0.25, g: 0.8, b: 1, a: 1}
   groggyColor: {r: 1, g: 0.9, b: 0.2, a: 1}
   hitFlashTime: 0.08
+  knockbackTime: 0.12
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

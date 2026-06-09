@@ -1,11 +1,13 @@
+using System.Collections;
 using UnityEngine;
 
 [RequireComponent(typeof(SpriteRenderer))]
 [RequireComponent(typeof(BoxCollider2D))]
 [RequireComponent(typeof(Rigidbody2D))]
-public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusReceiver
+public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusReceiver
 {
     [SerializeField] private EnemyData enemyData;
+    [SerializeField] private EnemyProjectile projectilePrefab;
     [SerializeField] private Color hitColor = new Color(1f, 0.25f, 0.2f, 1f);
     [SerializeField] private Color timeStopColor = new Color(0.25f, 0.8f, 1f, 1f);
     [SerializeField] private Color groggyColor = new Color(1f, 0.9f, 0.2f, 1f);
@@ -20,20 +22,20 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
     private Rigidbody2D rb;
     private Transform player;
     private DungeonRunManager dungeonRunManager;
+    private Coroutine shootRoutine;
     private float currentHealth;
-    private float contactTimer;
+    private float shootTimer;
     private float hitFlashTimer;
     private float groggyTimer;
     private float knockbackTimer;
     private Vector2 knockbackVelocity;
     private bool isTimeStopped;
-    private Color normalColor = Color.white;
+    private Color normalColor;
 
     private void Awake()
     {
         spriteRenderer = GetComponent<SpriteRenderer>();
         rb = GetComponent<Rigidbody2D>();
-
         rb.gravityScale = 0f;
         rb.freezeRotation = true;
         rb.linearDamping = 2f;
@@ -53,8 +55,8 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
 
     private void Update()
     {
-        if (contactTimer > 0f)
-            contactTimer -= Time.deltaTime;
+        if (shootTimer > 0f)
+            shootTimer -= Time.deltaTime;
 
         if (hitFlashTimer > 0f)
         {
@@ -67,20 +69,21 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
         {
             groggyTimer -= Time.deltaTime;
             if (groggyTimer <= 0f && !IsDead)
-            {
-                rb.linearVelocity = Vector2.zero;
                 RefreshColor();
-            }
         }
 
         if (knockbackTimer > 0f)
             knockbackTimer -= Time.deltaTime;
+
+        if (CanStartShoot())
+            shootRoutine = StartCoroutine(ShootRoutine());
     }
 
     private void FixedUpdate()
     {
         if (!CanAct()) return;
         if (IsDead || player == null || isTimeStopped || groggyTimer > 0f) return;
+        if (shootRoutine != null) return;
 
         if (knockbackTimer > 0f)
         {
@@ -89,22 +92,18 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
         }
 
         Vector2 currentPosition = rb.position;
-        Vector2 targetPosition = player.position;
-        Vector2 direction = (targetPosition - currentPosition).normalized;
-        rb.MovePosition(currentPosition + direction * GetMoveSpeed() * Time.fixedDeltaTime);
-    }
+        Vector2 playerPosition = player.position;
+        Vector2 toPlayer = playerPosition - currentPosition;
+        float distance = toPlayer.magnitude;
+        float preferredDistance = enemyData != null ? enemyData.preferredDistance : 2f;
 
-    private void OnTriggerStay2D(Collider2D other)
-    {
-        if (!CanAct()) return;
-        if (IsDead || contactTimer > 0f) return;
+        Vector2 moveDirection = Vector2.zero;
+        if (distance > preferredDistance + 0.2f)
+            moveDirection = toPlayer.normalized;
+        else if (distance < preferredDistance - 0.2f)
+            moveDirection = -toPlayer.normalized;
 
-        PlayerHealth playerHealth = other.GetComponent<PlayerHealth>();
-        if (playerHealth == null) return;
-
-        Vector2 hitDirection = ((Vector2)playerHealth.transform.position - rb.position).normalized;
-        playerHealth.TakeDamage(GetContactDamage(), hitDirection);
-        contactTimer = GetContactCooldown();
+        rb.MovePosition(currentPosition + moveDirection * GetMoveSpeed() * Time.fixedDeltaTime);
     }
 
     public void TakeDamage(float damage, Vector2 hitPoint, Vector2 hitDirection)
@@ -112,7 +111,6 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
         if (IsDead) return;
 
         currentHealth = Mathf.Max(0f, currentHealth - damage);
-
         StartKnockback(hitDirection);
 
         spriteRenderer.color = hitColor;
@@ -128,14 +126,14 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
 
     public void ResetEnemy()
     {
-        currentHealth = GetMaxHealth();
-        contactTimer = 0f;
+        currentHealth = enemyData != null ? enemyData.maxHealth : 25f;
+        shootTimer = enemyData != null ? enemyData.shootInterval : 1.4f;
+        StopShootRoutine();
         hitFlashTimer = 0f;
         groggyTimer = 0f;
         knockbackTimer = 0f;
         knockbackVelocity = Vector2.zero;
         isTimeStopped = false;
-        rb.simulated = true;
         rb.linearVelocity = Vector2.zero;
         ApplyData();
     }
@@ -155,43 +153,69 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
 
         groggyTimer = duration;
         knockbackTimer = 0f;
+        StopShootRoutine();
         rb.linearVelocity = Vector2.zero;
         RefreshColor();
     }
 
+    private bool CanStartShoot()
+    {
+        if (!CanAct() || IsDead || player == null || isTimeStopped || groggyTimer > 0f || shootTimer > 0f || shootRoutine != null)
+            return false;
+
+        float distance = Vector2.Distance(rb.position, player.position);
+        float shootRange = enemyData != null ? enemyData.shootRange : 3.2f;
+        return distance <= shootRange;
+    }
+
+    private IEnumerator ShootRoutine()
+    {
+        rb.linearVelocity = Vector2.zero;
+        yield return new WaitForSeconds(enemyData != null ? enemyData.shootStandTime : 0.25f);
+
+        int shotCount = enemyData != null ? Mathf.Max(1, enemyData.burstShotCount) : 3;
+        float interval = enemyData != null ? enemyData.burstShotInterval : 0.18f;
+
+        for (int i = 0; i < shotCount; i++)
+        {
+            if (!CanAct() || IsDead || player == null || isTimeStopped || groggyTimer > 0f)
+                break;
+
+            ShootOneProjectile();
+            yield return new WaitForSeconds(interval);
+        }
+
+        shootTimer = enemyData != null ? enemyData.shootInterval : 1.4f;
+        shootRoutine = null;
+    }
+
+    private void ShootOneProjectile()
+    {
+        if (projectilePrefab == null) return;
+
+        Vector2 direction = ((Vector2)player.position - rb.position).normalized;
+        EnemyProjectile projectile = Instantiate(projectilePrefab, rb.position, Quaternion.identity);
+        projectile.Launch(direction, GetProjectileSpeed(), GetProjectileDamage());
+    }
+
+    private void StopShootRoutine()
+    {
+        if (shootRoutine != null)
+            StopCoroutine(shootRoutine);
+        shootRoutine = null;
+    }
+
     private void ApplyData()
     {
-        normalColor = enemyData != null ? enemyData.color : new Color(0.4f, 0.9f, 0.45f, 1f);
+        normalColor = enemyData != null ? enemyData.color : new Color(0.95f, 0.75f, 0.25f, 1f);
         spriteRenderer.color = normalColor;
-        spriteRenderer.sprite = enemyData != null && enemyData.sprite != null
-            ? enemyData.sprite
-            : GetGeneratedSprite();
+        spriteRenderer.sprite = enemyData != null && enemyData.sprite != null ? enemyData.sprite : GetGeneratedSprite();
     }
 
-    private float GetMaxHealth()
-    {
-        return enemyData != null ? enemyData.maxHealth : 30f;
-    }
-
-    private float GetMoveSpeed()
-    {
-        return enemyData != null ? enemyData.moveSpeed : 1f;
-    }
-
-    private float GetContactDamage()
-    {
-        return enemyData != null ? enemyData.contactDamage : 8f;
-    }
-
-    private float GetContactCooldown()
-    {
-        return enemyData != null ? enemyData.contactDamageCooldown : 0.7f;
-    }
-
-    private float GetKnockbackForce()
-    {
-        return enemyData != null ? enemyData.knockbackForce : 2f;
-    }
+    private float GetMoveSpeed() => enemyData != null ? enemyData.moveSpeed : 0.75f;
+    private float GetProjectileDamage() => enemyData != null ? enemyData.projectileDamage : 7f;
+    private float GetProjectileSpeed() => enemyData != null ? enemyData.projectileSpeed : 2.5f;
+    private float GetKnockbackForce() => enemyData != null ? enemyData.knockbackForce : 2f;
 
     private void StartKnockback(Vector2 hitDirection)
     {
@@ -205,18 +229,11 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
     private void RefreshColor()
     {
         if (isTimeStopped)
-        {
             spriteRenderer.color = timeStopColor;
-            return;
-        }
-
-        if (groggyTimer > 0f)
-        {
+        else if (groggyTimer > 0f)
             spriteRenderer.color = groggyColor;
-            return;
-        }
-
-        spriteRenderer.color = normalColor;
+        else
+            spriteRenderer.color = normalColor;
     }
 
     private bool CanAct()
@@ -234,16 +251,14 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
 
         Texture2D texture = new Texture2D(48, 48);
         texture.filterMode = FilterMode.Point;
-
         Color[] pixels = new Color[48 * 48];
         for (int i = 0; i < pixels.Length; i++)
             pixels[i] = Color.white;
-
         texture.SetPixels(pixels);
         texture.Apply();
 
         generatedSprite = Sprite.Create(texture, new Rect(0, 0, 48, 48), new Vector2(0.5f, 0.5f), 100f);
-        generatedSprite.name = "Generated Chaser Enemy Sprite";
+        generatedSprite.name = "Generated Shooter Enemy Sprite";
         return generatedSprite;
     }
 }

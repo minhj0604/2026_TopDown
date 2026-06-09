@@ -6,66 +6,75 @@ using System.Collections.Generic;
 [RequireComponent(typeof(Animator))]
 public class PlayerCombat : MonoBehaviour
 {
-    [Header("장착 무기")]
+    [Header("Weapon")]
     public WeaponData currentWeapon;
-
-    [Header("무기 스왑")]
     public WeaponData weaponSlot1;
     public WeaponData weaponSlot2;
     public WeaponData weaponSlot3;
 
-    [Header("회중시계 출력")]
+    [Header("Clock Gauge")]
     [SerializeField] private ClockOutputSystem clockOutput;
     [SerializeField] private float swapAttackBonusTime = 1.2f;
 
-    [Header("콤보 설정")]
-    [Tooltip("최대 콤보 단계 (1~maxCombo 까지 순환)")]
+    [Header("Combo")]
     public int maxCombo = 3;
-    [Tooltip("현재 Animator에 실제로 연결된 공격 상태 수")]
-    [SerializeField] private int animatorComboStateCount = 3;
-    [Tooltip("다음 입력을 받아주는 유예 시간(초). 이 시간이 지나면 콤보 초기화")]
+    [SerializeField] private int animatorComboStateCount = 5;
     public float comboResetTime = 0.8f;
-    [Tooltip("마지막 타수 후 다시 공격할 수 있기까지의 짧은 후딜")]
     [SerializeField] private float comboEndRecoveryTime = 0.35f;
-    [Tooltip("애니메이션 종료 이벤트가 누락됐을 때 공격 상태를 풀어주는 안전 시간")]
     [SerializeField] private float attackSafetyTime = 1.2f;
+    [SerializeField] private float attackEndBackupTime = 0.3f;
+    [SerializeField] private float attackInputBufferTime = 0.45f;
 
-    [Header("Animator 파라미터 이름")]
+    [Header("Animator Parameters")]
     [SerializeField] private string attackTrigger = "Attack";
     [SerializeField] private string comboStepParam = "ComboStep";
 
-    [Header("타격 판정")]
-    [Tooltip("비워두면 플레이어 앞쪽으로 무기 사거리만큼 자동 판정합니다.")]
+    [Header("Hit Check")]
     [SerializeField] private Transform attackOrigin;
     [SerializeField] private LayerMask hitLayers = ~0;
     [SerializeField] private float minimumHitRadius = 0.15f;
     [SerializeField] private bool showDebugHitArea = true;
 
-    [Header("범위 표시")]
+    [Header("Range Preview")]
     [SerializeField] private bool showRangePreview = true;
     [SerializeField] private Color rangePreviewColor = new Color(1f, 0.25f, 0.15f, 0.55f);
     [SerializeField] private float rangePreviewWidth = 0.03f;
     [SerializeField] private int rangePreviewSegments = 48;
 
-    // 외부(PlayerController)에서 이동 잠금에 사용
+    [Header("Hitbox Flash")]
+    [SerializeField] private bool showHitboxFlash = true;
+    [SerializeField] private Color hitboxFlashColor = new Color(1f, 0f, 0f, 0.9f);
+    [SerializeField] private float hitboxFlashWidth = 0.06f;
+    [SerializeField] private float hitboxFlashTime = 0.2f;
+
+    [Header("Hit Camera Shake")]
+    [SerializeField] private bool shakeCameraOnHit = true;
+    [SerializeField] private float hitShakeTime = 0.08f;
+    [SerializeField] private float hitShakePower = 0.035f;
+
     public bool IsAttacking => isAttacking;
     public int ComboStep => comboStep;
     public int CurrentWeaponSlot => currentWeaponIndex + 1;
     public WeaponData CurrentWeapon => currentWeapon;
 
     private Animator animator;
-    private PlayerController controller;   // 공격 종료 후 이동 복귀 알림용
+    private PlayerController controller;
     private int comboStep = 0;
     private bool isAttacking = false;
     private bool isInComboRecovery = false;
-    private bool bufferedInput = false;   // 공격 중에 들어온 다음 입력 예약
+    private bool bufferedInput = false;
     private bool hasExecutedHitThisAttack = false;
     private Coroutine resetRoutine;
     private Coroutine attackSafetyRoutine;
     private Vector2 attackDirection = Vector2.down;
     private int currentWeaponIndex = 0;
     private LineRenderer rangePreview;
+    private LineRenderer hitboxFlash;
+    private SpriteRenderer hitboxFlashSprite;
     private float swapAttackBonusTimer = 0f;
+    private float queuedAttackTimer = 0f;
+    private float hitboxFlashTimer = 0f;
+    private int attackSerial = 0;
 
     private readonly Collider2D[] hitBuffer = new Collider2D[16];
     private readonly List<MonoBehaviour> damagedTargets = new List<MonoBehaviour>();
@@ -87,11 +96,14 @@ public class PlayerCombat : MonoBehaviour
     {
         if (swapAttackBonusTimer > 0f)
             swapAttackBonusTimer -= Time.deltaTime;
+        if (queuedAttackTimer > 0f)
+            queuedAttackTimer -= Time.deltaTime;
 
+        UpdateHitboxFlashTimer();
+        ProcessQueuedAttack();
         UpdateRangePreview();
     }
 
-    // Input System: Move 액션에 함께 연결되어 마지막 입력 방향을 공격 방향으로 사용한다.
     public void OnMove(InputValue value)
     {
         Vector2 moveInput = value.Get<Vector2>();
@@ -99,54 +111,68 @@ public class PlayerCombat : MonoBehaviour
             attackDirection = moveInput.normalized;
     }
 
-    // Input System: Attack 액션에 연결 (PlayerInput - Send Messages 방식 기준)
     public void OnAttack(InputValue value)
     {
         if (!value.isPressed) return;
-        TryAttack();
+        QueueAttackInput();
     }
 
-    // Input System: Previous 액션에 연결. 기본 키 설정은 숫자 1.
     public void OnPrevious(InputValue value)
     {
         if (!value.isPressed) return;
         EquipWeapon(0, true);
     }
 
-    // Input System: Next 액션에 연결. 기본 키 설정은 숫자 2.
     public void OnNext(InputValue value)
     {
         if (!value.isPressed) return;
         EquipWeapon(1, true);
     }
 
-    // Input System: Crouch 액션에 연결. 프로토타입 테스트용 3번 무기 슬롯.
     public void OnCrouch(InputValue value)
     {
         if (!value.isPressed) return;
         EquipWeapon(2, true);
     }
 
-    private void TryAttack()
+    private void QueueAttackInput()
     {
+        if (isInComboRecovery)
+            return;
+
+        if (isAttacking && comboStep >= GetCurrentMaxCombo())
+        {
+            bufferedInput = false;
+            queuedAttackTimer = 0f;
+            return;
+        }
+
+        queuedAttackTimer = attackInputBufferTime;
+        if (isAttacking)
+            bufferedInput = true;
+
+        ProcessQueuedAttack();
+    }
+
+    private void ProcessQueuedAttack()
+    {
+        if (queuedAttackTimer <= 0f) return;
         if (isInComboRecovery) return;
-
-        // 공격 속도 보정 (무기가 있으면 attackSpeed를 애니메이터 speed에 반영)
-        if (currentWeapon != null && currentWeapon.attackSpeed > 0f)
-            animator.speed = currentWeapon.attackSpeed;
-
         if (isAttacking)
         {
-            // 이미 모션 중이면 다음 콤보 입력을 버퍼링만 해둔다.
             bufferedInput = true;
             return;
         }
 
+        queuedAttackTimer = 0f;
         StartNextCombo();
     }
 
     private void StartNextCombo()
     {
+        if (currentWeapon != null && currentWeapon.attackSpeed > 0f)
+            animator.speed = currentWeapon.attackSpeed;
+
         comboStep++;
         int currentMaxCombo = GetCurrentMaxCombo();
         if (comboStep > currentMaxCombo)
@@ -155,13 +181,14 @@ public class PlayerCombat : MonoBehaviour
         isAttacking = true;
         bufferedInput = false;
         hasExecutedHitThisAttack = false;
+        int currentAttackSerial = ++attackSerial;
 
         animator.SetInteger(comboStepParam, comboStep);
         animator.SetTrigger(attackTrigger);
 
         if (attackSafetyRoutine != null)
             StopCoroutine(attackSafetyRoutine);
-        attackSafetyRoutine = StartCoroutine(AttackSafetyTimer());
+        attackSafetyRoutine = StartCoroutine(AttackSafetyTimer(currentAttackSerial));
 
         if (resetRoutine != null)
         {
@@ -184,7 +211,7 @@ public class PlayerCombat : MonoBehaviour
         if (resetCombo)
         {
             swapAttackBonusTimer = swapAttackBonusTime;
-            ResetCombo();
+            ResetCombo(true);
         }
     }
 
@@ -199,29 +226,27 @@ public class PlayerCombat : MonoBehaviour
     private IEnumerator ComboResetTimer()
     {
         yield return new WaitForSeconds(comboResetTime);
-        // 유예 시간 안에 다음 입력이 없었으면 콤보 종료
-        ResetCombo();
+        ResetCombo(true);
     }
 
-    private IEnumerator AttackSafetyTimer()
+    private IEnumerator AttackSafetyTimer(int expectedAttackSerial)
     {
         float speed = currentWeapon != null && currentWeapon.attackSpeed > 0f
             ? currentWeapon.attackSpeed
             : 1f;
-        yield return new WaitForSeconds(attackSafetyTime / speed);
+        float backupTime = Mathf.Min(attackSafetyTime, attackEndBackupTime);
+        yield return new WaitForSeconds(backupTime / speed);
 
-        if (isAttacking)
+        if (isAttacking && expectedAttackSerial == attackSerial)
         {
-            Debug.LogWarning("Attack animation end event was not called. Combat state reset by safety timer.", this);
+            attackSafetyRoutine = null;
             OnAttackAnimationEnd();
+            yield break;
         }
 
         attackSafetyRoutine = null;
     }
 
-    /// <summary>
-    /// Animation Event: 타격 프레임에서 호출. 실제 데미지/히트박스 판정을 여기에 넣는다.
-    /// </summary>
     public void ExecuteAttackHit()
     {
         if (!isAttacking) return;
@@ -230,6 +255,7 @@ public class PlayerCombat : MonoBehaviour
 
         hasExecutedHitThisAttack = true;
         GetCurrentHitArea(out Vector2 hitCenter, out float radius);
+        ShowHitboxFlash(hitCenter, radius);
 
         int hitCount = Physics2D.OverlapCircleNonAlloc(hitCenter, radius, hitBuffer, hitLayers);
         damagedTargets.Clear();
@@ -260,14 +286,14 @@ public class PlayerCombat : MonoBehaviour
             if (usedSwapBonus)
                 swapAttackBonusTimer = 0f;
         }
+
+        if (damagedTargets.Count > 0)
+            ShakeCameraOnHit();
     }
 
-    /// <summary>
-    /// Animation Event: 현재 공격 모션이 끝나는 마지막 프레임에서 호출.
-    /// 버퍼된 입력이 있으면 다음 콤보로 이어지고, 없으면 콤보 종료.
-    /// </summary>
     public void OnAttackAnimationEnd()
     {
+        if (!isAttacking) return;
         if (isInComboRecovery) return;
 
         if (attackSafetyRoutine != null)
@@ -284,6 +310,7 @@ public class PlayerCombat : MonoBehaviour
         }
         else if (bufferedInput)
         {
+            queuedAttackTimer = 0f;
             isAttacking = false;
             StartNextCombo();
         }
@@ -324,26 +351,29 @@ public class PlayerCombat : MonoBehaviour
             controller.RefreshAfterAttack();
 
         yield return new WaitForSeconds(comboEndRecoveryTime);
-        ResetCombo();
+        ResetCombo(true);
     }
 
-    private void ResetCombo()
+    private void ResetCombo(bool clearQueuedAttack)
     {
         comboStep = 0;
         isAttacking = false;
         isInComboRecovery = false;
         bufferedInput = false;
         hasExecutedHitThisAttack = false;
+        if (clearQueuedAttack)
+            queuedAttackTimer = 0f;
         animator.SetInteger(comboStepParam, 0);
         animator.speed = 1f;
         resetRoutine = null;
+        attackSerial++;
+
         if (attackSafetyRoutine != null)
         {
             StopCoroutine(attackSafetyRoutine);
             attackSafetyRoutine = null;
         }
 
-        // 공격이 끝났으니 이동/idle 스프라이트 상태를 다시 맞춰준다.
         if (controller != null)
             controller.RefreshAfterAttack();
     }
@@ -363,15 +393,33 @@ public class PlayerCombat : MonoBehaviour
         if (rangePreview == null)
             rangePreview = gameObject.AddComponent<LineRenderer>();
 
-        rangePreview.useWorldSpace = true;
-        rangePreview.loop = true;
-        rangePreview.positionCount = Mathf.Max(12, rangePreviewSegments);
-        rangePreview.startWidth = rangePreviewWidth;
-        rangePreview.endWidth = rangePreviewWidth;
-        rangePreview.startColor = rangePreviewColor;
-        rangePreview.endColor = rangePreviewColor;
-        rangePreview.material = new Material(Shader.Find("Sprites/Default"));
-        rangePreview.sortingOrder = 20;
+        SetupCircleRenderer(rangePreview, rangePreviewColor, rangePreviewWidth, 20);
+        rangePreview.enabled = false;
+
+        hitboxFlash = gameObject.AddComponent<LineRenderer>();
+        SetupCircleRenderer(hitboxFlash, hitboxFlashColor, hitboxFlashWidth, 25);
+        hitboxFlash.enabled = false;
+
+        GameObject flashObject = new GameObject("HitboxFlash");
+        flashObject.transform.SetParent(transform);
+        hitboxFlashSprite = flashObject.AddComponent<SpriteRenderer>();
+        hitboxFlashSprite.sprite = CreateCircleSprite();
+        hitboxFlashSprite.color = new Color(hitboxFlashColor.r, hitboxFlashColor.g, hitboxFlashColor.b, 0.35f);
+        hitboxFlashSprite.sortingOrder = 100;
+        hitboxFlashSprite.enabled = false;
+    }
+
+    private void SetupCircleRenderer(LineRenderer renderer, Color color, float width, int sortingOrder)
+    {
+        renderer.useWorldSpace = true;
+        renderer.loop = true;
+        renderer.positionCount = Mathf.Max(12, rangePreviewSegments);
+        renderer.startWidth = width;
+        renderer.endWidth = width;
+        renderer.startColor = color;
+        renderer.endColor = color;
+        renderer.material = new Material(Shader.Find("Sprites/Default"));
+        renderer.sortingOrder = sortingOrder;
     }
 
     private void UpdateRangePreview()
@@ -383,24 +431,58 @@ public class PlayerCombat : MonoBehaviour
         if (!shouldShow) return;
 
         GetCurrentHitArea(out Vector2 hitCenter, out float radius);
+        DrawCircle(rangePreview, hitCenter, radius, rangePreviewColor, rangePreviewWidth);
+    }
 
+    private void ShowHitboxFlash(Vector2 hitCenter, float radius)
+    {
+        if (!showHitboxFlash || hitboxFlash == null) return;
+
+        DrawCircle(hitboxFlash, hitCenter, radius, hitboxFlashColor, hitboxFlashWidth);
+        ShowHitboxFlashSprite(hitCenter, radius);
+        hitboxFlashTimer = hitboxFlashTime;
+        hitboxFlash.enabled = true;
+    }
+
+    private void ShowHitboxFlashSprite(Vector2 hitCenter, float radius)
+    {
+        if (hitboxFlashSprite == null) return;
+
+        hitboxFlashSprite.transform.position = new Vector3(hitCenter.x, hitCenter.y, transform.position.z);
+        hitboxFlashSprite.transform.localScale = Vector3.one * radius * 2f;
+        hitboxFlashSprite.enabled = true;
+    }
+
+    private void UpdateHitboxFlashTimer()
+    {
+        if (hitboxFlashTimer <= 0f) return;
+
+        hitboxFlashTimer -= Time.deltaTime;
+        if (hitboxFlashTimer <= 0f && hitboxFlash != null)
+            hitboxFlash.enabled = false;
+        if (hitboxFlashTimer <= 0f && hitboxFlashSprite != null)
+            hitboxFlashSprite.enabled = false;
+    }
+
+    private void DrawCircle(LineRenderer renderer, Vector2 center, float radius, Color color, float width)
+    {
         int segmentCount = Mathf.Max(12, rangePreviewSegments);
-        if (rangePreview.positionCount != segmentCount)
-            rangePreview.positionCount = segmentCount;
+        if (renderer.positionCount != segmentCount)
+            renderer.positionCount = segmentCount;
 
-        rangePreview.startWidth = rangePreviewWidth;
-        rangePreview.endWidth = rangePreviewWidth;
-        rangePreview.startColor = rangePreviewColor;
-        rangePreview.endColor = rangePreviewColor;
+        renderer.startWidth = width;
+        renderer.endWidth = width;
+        renderer.startColor = color;
+        renderer.endColor = color;
 
         for (int i = 0; i < segmentCount; i++)
         {
             float angle = (float)i / segmentCount * Mathf.PI * 2f;
             Vector3 point = new Vector3(
-                hitCenter.x + Mathf.Cos(angle) * radius,
-                hitCenter.y + Mathf.Sin(angle) * radius,
+                center.x + Mathf.Cos(angle) * radius,
+                center.y + Mathf.Sin(angle) * radius,
                 transform.position.z);
-            rangePreview.SetPosition(i, point);
+            renderer.SetPosition(i, point);
         }
     }
 
@@ -413,6 +495,51 @@ public class PlayerCombat : MonoBehaviour
         hitCenter = attackOrigin != null
             ? (Vector2)attackOrigin.position
             : (Vector2)transform.position + attackDirection * radius;
+    }
+
+    private Sprite CreateCircleSprite()
+    {
+        const int size = 64;
+        Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        texture.filterMode = FilterMode.Point;
+
+        Vector2 center = new Vector2((size - 1) * 0.5f, (size - 1) * 0.5f);
+        float radius = size * 0.48f;
+        float outlineRadius = size * 0.42f;
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float distance = Vector2.Distance(new Vector2(x, y), center);
+                Color pixel = Color.clear;
+
+                if (distance <= radius)
+                {
+                    float alpha = distance >= outlineRadius ? 1f : 0.45f;
+                    pixel = new Color(1f, 0f, 0f, alpha);
+                }
+
+                texture.SetPixel(x, y, pixel);
+            }
+        }
+
+        texture.Apply();
+        return Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), size);
+    }
+
+    private void ShakeCameraOnHit()
+    {
+        if (!shakeCameraOnHit) return;
+
+        Camera mainCamera = Camera.main;
+        if (mainCamera == null) return;
+
+        SimpleCameraShake shake = mainCamera.GetComponent<SimpleCameraShake>();
+        if (shake == null)
+            shake = mainCamera.gameObject.AddComponent<SimpleCameraShake>();
+
+        shake.Shake(hitShakeTime, hitShakePower);
     }
 
     private void OnDrawGizmosSelected()

@@ -14,7 +14,7 @@ GameObject:
   - component: {fileID: 100004}
   - component: {fileID: 100005}
   m_Layer: 0
-  m_Name: ChaserEnemy
+  m_Name: ChargerEnemy
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -85,7 +85,7 @@ SpriteRenderer:
   m_SortingOrder: 2
   m_MaskInteraction: 0
   m_Sprite: {fileID: 0}
-  m_Color: {r: 0.35, g: 0.9, b: 0.45, a: 1}
+  m_Color: {r: 0.95, g: 0.35, b: 0.35, a: 1}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
@@ -107,7 +107,7 @@ Rigidbody2D:
   m_UseFullKinematicContacts: 0
   m_UseAutoMass: 0
   m_Mass: 1
-  m_LinearDamping: 2
+  m_LinearDamping: 1
   m_AngularDamping: 0.05
   m_GravityScale: 0
   m_Material: {fileID: 0}
@@ -176,10 +176,11 @@ MonoBehaviour:
   m_GameObject: {fileID: 100000}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2b5d48554ccd4e918ee2f52663c5d748, type: 3}
+  m_Script: {fileID: 11500000, guid: 560e225ad153446e8d237b9d88b7ab01, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ChaserEnemy
-  enemyData: {fileID: 11400000, guid: 2ca46a4e9be84673a32a966f32c9f7b3, type: 2}
+  m_EditorClassIdentifier: Assembly-CSharp::ChargerEnemy
+  enemyData: {fileID: 11400000, guid: b70a55c8e6684c938ca29e794bb98025, type: 2}
+  prepareColor: {r: 1, g: 0.45, b: 0.15, a: 1}
   hitColor: {r: 1, g: 0.25, b: 0.2, a: 1}
   timeStopColor: {r: 0.25, g: 0.8, b: 1, a: 1}
   groggyColor: {r: 1, g: 0.9, b: 0.2, a: 1}
