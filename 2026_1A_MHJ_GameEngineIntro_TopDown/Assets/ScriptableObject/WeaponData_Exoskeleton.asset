@@ -21,45 +21,45 @@ MonoBehaviour:
   comboCount: 5
   comboSteps:
   - damageMultiplier: 0.85
-    speedMultiplier: 1.25
-    rangeMultiplier: 0.85
-    knockbackMultiplier: 0.8
+    speedMultiplier: 1.45
+    rangeMultiplier: 1.35
+    knockbackMultiplier: 1.5
     groggyTime: 0.04
-    comboDelay: 0.16
-    lungeDistance: 0.08
-    lungeTime: 0.055
-  - damageMultiplier: 0.9
-    speedMultiplier: 1.25
-    rangeMultiplier: 0.85
-    knockbackMultiplier: 0.85
-    groggyTime: 0.04
-    comboDelay: 0.16
-    lungeDistance: 0.08
-    lungeTime: 0.055
-  - damageMultiplier: 0.95
-    speedMultiplier: 1.2
-    rangeMultiplier: 0.9
-    knockbackMultiplier: 0.9
-    groggyTime: 0.05
-    comboDelay: 0.18
-    lungeDistance: 0.09
-    lungeTime: 0.06
-  - damageMultiplier: 1
-    speedMultiplier: 1
-    rangeMultiplier: 0.95
-    knockbackMultiplier: 1
-    groggyTime: 0.06
-    comboDelay: 0.22
-    lungeDistance: 0.1
+    comboDelay: 0.13
+    lungeDistance: 0.06
     lungeTime: 0.065
+  - damageMultiplier: 0.9
+    speedMultiplier: 1.65
+    rangeMultiplier: 0.85
+    knockbackMultiplier: 1.55
+    groggyTime: 0.04
+    comboDelay: 0.08
+    lungeDistance: 0.06
+    lungeTime: 0.065
+  - damageMultiplier: 0.95
+    speedMultiplier: 1.65
+    rangeMultiplier: 0.9
+    knockbackMultiplier: 1.6
+    groggyTime: 0.05
+    comboDelay: 0.08
+    lungeDistance: 0.07
+    lungeTime: 0.07
+  - damageMultiplier: 1
+    speedMultiplier: 1.55
+    rangeMultiplier: 0.95
+    knockbackMultiplier: 1.75
+    groggyTime: 0.06
+    comboDelay: 0.68
+    lungeDistance: 0.08
+    lungeTime: 0.08
   - damageMultiplier: 2.4
-    speedMultiplier: 0.65
+    speedMultiplier: 0.58
     rangeMultiplier: 1.15
-    knockbackMultiplier: 2.5
+    knockbackMultiplier: 3.2
     groggyTime: 0.18
-    comboDelay: 0.34
-    lungeDistance: 0.18
-    lungeTime: 0.11
+    comboDelay: 0.52
+    lungeDistance: 0.12
+    lungeTime: 0.14
   watchSkillType: 0
   gaugeCost: 20
   weaponPrefab: {fileID: 0}

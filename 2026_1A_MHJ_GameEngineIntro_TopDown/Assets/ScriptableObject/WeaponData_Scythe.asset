@@ -15,35 +15,35 @@ MonoBehaviour:
   weaponName: "\uB300\uB0AB"
   icon: {fileID: 0}
   description: 
-  attackPower: 15
+  attackPower: 10
   attackSpeed: 0.75
   attackRange: 0.78
   comboCount: 3
   comboSteps:
-  - damageMultiplier: 1
-    speedMultiplier: 0.9
-    rangeMultiplier: 0.95
-    knockbackMultiplier: 1.3
-    groggyTime: 0.08
-    comboDelay: 0.28
-    lungeDistance: 0.12
-    lungeTime: 0.11
-  - damageMultiplier: 1.05
+  - damageMultiplier: 0.85
     speedMultiplier: 0.9
     rangeMultiplier: 1.05
-    knockbackMultiplier: 1.4
-    groggyTime: 0.09
-    comboDelay: 0.3
-    lungeDistance: 0.13
-    lungeTime: 0.12
-  - damageMultiplier: 1.55
-    speedMultiplier: 0.72
-    rangeMultiplier: 1.25
-    knockbackMultiplier: 2.2
-    groggyTime: 0.2
+    knockbackMultiplier: 2
+    groggyTime: 0.08
     comboDelay: 0.42
-    lungeDistance: 0.24
+    lungeDistance: 0.08
     lungeTime: 0.16
+  - damageMultiplier: 0.95
+    speedMultiplier: 0.9
+    rangeMultiplier: 1.15
+    knockbackMultiplier: 3.15
+    groggyTime: 0.18
+    comboDelay: 0.52
+    lungeDistance: 0.04
+    lungeTime: 0.17
+  - damageMultiplier: 1.3
+    speedMultiplier: 0.68
+    rangeMultiplier: 1.2
+    knockbackMultiplier: 1.4
+    groggyTime: 0.3
+    comboDelay: 0.62
+    lungeDistance: 0.08
+    lungeTime: 0.22
   watchSkillType: 2
   gaugeCost: 30
   weaponPrefab: {fileID: 0}

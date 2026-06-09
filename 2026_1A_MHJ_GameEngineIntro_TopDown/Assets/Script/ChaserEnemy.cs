@@ -11,6 +11,7 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
     [SerializeField] private Color groggyColor = new Color(1f, 0.9f, 0.2f, 1f);
     [SerializeField] private float hitFlashTime = 0.08f;
     [SerializeField] private float knockbackTime = 0.12f;
+    [SerializeField] private float hitStunTime = 0.28f;
     [SerializeField] private float contactDamageCenterDistance = 0.38f;
 
     [Header("Chase")]
@@ -30,6 +31,7 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
     private static Sprite generatedSprite;
 
     private SpriteRenderer spriteRenderer;
+    private EnemyHealthBar healthBar;
     private Rigidbody2D rb;
     private Transform player;
     private DungeonRunManager dungeonRunManager;
@@ -38,6 +40,7 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
     private float hitFlashTimer;
     private float groggyTimer;
     private float knockbackTimer;
+    private float hitStunTimer;
     private Vector2 knockbackVelocity;
     private Vector2 spawnPosition;
     private Vector2 wanderTarget;
@@ -49,6 +52,10 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
     private void Awake()
     {
         spriteRenderer = GetComponent<SpriteRenderer>();
+        healthBar = GetComponentInChildren<EnemyHealthBar>();
+        if (healthBar == null)
+            healthBar = new GameObject("HealthBar").AddComponent<EnemyHealthBar>();
+        healthBar.transform.SetParent(transform);
         rb = GetComponent<Rigidbody2D>();
 
         rb.gravityScale = 0f;
@@ -94,6 +101,8 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
 
         if (knockbackTimer > 0f)
             knockbackTimer -= Time.deltaTime;
+        if (hitStunTimer > 0f)
+            hitStunTimer -= Time.deltaTime;
     }
 
     private void FixedUpdate()
@@ -107,6 +116,7 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
             return;
         }
 
+        if (hitStunTimer > 0f) return;
         if (groggyTimer > 0f) return;
 
         Vector2 currentPosition = rb.position;
@@ -132,6 +142,10 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
         PlayerHealth playerHealth = other.GetComponent<PlayerHealth>();
         if (playerHealth == null) return;
 
+        PlayerCombat playerCombat = other.GetComponent<PlayerCombat>();
+        if (playerCombat != null && playerCombat.ShouldIgnoreContactDamageFrom(this))
+            return;
+
         if (Vector2.Distance(rb.position, playerHealth.transform.position) > contactDamageCenterDistance)
             return;
 
@@ -145,8 +159,11 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
         if (IsDead) return;
 
         currentHealth = Mathf.Max(0f, currentHealth - damage);
+        if (healthBar != null)
+            healthBar.SetValue(currentHealth, GetMaxHealth());
 
         StartKnockback(hitDirection);
+        hitStunTimer = hitStunTime;
 
         spriteRenderer.color = hitColor;
         hitFlashTimer = hitFlashTime;
@@ -162,10 +179,13 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
     public void ResetEnemy()
     {
         currentHealth = GetMaxHealth();
+        if (healthBar != null)
+            healthBar.SetValue(currentHealth, GetMaxHealth());
         contactTimer = 0f;
         hitFlashTimer = 0f;
         groggyTimer = 0f;
         knockbackTimer = 0f;
+        hitStunTimer = 0f;
         knockbackVelocity = Vector2.zero;
         spawnPosition = rb.position;
         wanderTimer = 0f;

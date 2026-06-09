@@ -4,10 +4,17 @@ using System.Collections;
 public class PlayerHealth : MonoBehaviour
 {
     [SerializeField] private float maxHealth = 100f;
-    [SerializeField] private float hurtInvincibleTime = 0.45f;
+    [SerializeField] private float hurtInvincibleTime = 1.5f;
     [SerializeField] private float hurtKnockbackDistance = 0.18f;
     [SerializeField] private float deathReturnDelay = 0.6f;
     [SerializeField] private Color hurtColor = new Color(1f, 0.35f, 0.35f, 1f);
+
+    [Header("Low Health Feedback")]
+    [SerializeField] private float lowHealthRatio = 0.3f;
+    [SerializeField] private float lowHealthShakeInterval = 0.45f;
+    [SerializeField] private float lowHealthShakeTime = 0.05f;
+    [SerializeField] private float lowHealthShakePower = 0.018f;
+    [SerializeField] private Color lowHealthVignetteColor = new Color(0.8f, 0f, 0f, 0.18f);
     [SerializeField] private bool showDebugUI = true;
 
     public float CurrentHealth => currentHealth;
@@ -22,6 +29,8 @@ public class PlayerHealth : MonoBehaviour
     private Rigidbody2D rb;
     private Color normalColor = Color.white;
     private bool isReturningToLobby;
+    private Texture2D vignetteTexture;
+    private float lowHealthShakeTimer;
 
     private void Awake()
     {
@@ -41,6 +50,8 @@ public class PlayerHealth : MonoBehaviour
             if (invincibleTimer <= 0f && spriteRenderer != null)
                 spriteRenderer.color = normalColor;
         }
+
+        UpdateLowHealthCameraShake();
     }
 
     public void TakeDamage(float damage)
@@ -88,6 +99,7 @@ public class PlayerHealth : MonoBehaviour
     {
         currentHealth = maxHealth;
         invincibleTimer = 0f;
+        lowHealthShakeTimer = 0f;
         isReturningToLobby = false;
         if (spriteRenderer != null)
             spriteRenderer.color = normalColor;
@@ -137,6 +149,8 @@ public class PlayerHealth : MonoBehaviour
 
     private void OnGUI()
     {
+        DrawLowHealthVignette();
+
         if (!showDebugUI) return;
 
         GUILayout.BeginArea(new Rect(300f, 20f, 180f, 80f), GUI.skin.box);
@@ -145,5 +159,58 @@ public class PlayerHealth : MonoBehaviour
         if (GUILayout.Button("Reset HP"))
             ResetHealth();
         GUILayout.EndArea();
+    }
+
+    private void UpdateLowHealthCameraShake()
+    {
+        if (IsDead || !IsLowHealth())
+        {
+            lowHealthShakeTimer = 0f;
+            return;
+        }
+
+        lowHealthShakeTimer -= Time.deltaTime;
+        if (lowHealthShakeTimer > 0f)
+            return;
+
+        lowHealthShakeTimer = lowHealthShakeInterval;
+        Camera mainCamera = Camera.main;
+        if (mainCamera == null) return;
+
+        SimpleCameraShake shake = mainCamera.GetComponent<SimpleCameraShake>();
+        if (shake == null)
+            shake = mainCamera.gameObject.AddComponent<SimpleCameraShake>();
+
+        shake.Shake(lowHealthShakeTime, lowHealthShakePower);
+    }
+
+    private void DrawLowHealthVignette()
+    {
+        if (!IsLowHealth() || IsDead)
+            return;
+
+        if (vignetteTexture == null)
+        {
+            vignetteTexture = new Texture2D(1, 1);
+            vignetteTexture.SetPixel(0, 0, Color.white);
+            vignetteTexture.Apply();
+        }
+
+        float danger = 1f - Mathf.Clamp01(currentHealth / Mathf.Max(1f, maxHealth * lowHealthRatio));
+        Color previousColor = GUI.color;
+        GUI.color = new Color(lowHealthVignetteColor.r, lowHealthVignetteColor.g, lowHealthVignetteColor.b, lowHealthVignetteColor.a * danger);
+
+        float edge = Mathf.Lerp(18f, 54f, danger);
+        GUI.DrawTexture(new Rect(0f, 0f, Screen.width, edge), vignetteTexture);
+        GUI.DrawTexture(new Rect(0f, Screen.height - edge, Screen.width, edge), vignetteTexture);
+        GUI.DrawTexture(new Rect(0f, 0f, edge, Screen.height), vignetteTexture);
+        GUI.DrawTexture(new Rect(Screen.width - edge, 0f, edge, Screen.height), vignetteTexture);
+
+        GUI.color = previousColor;
+    }
+
+    private bool IsLowHealth()
+    {
+        return currentHealth > 0f && currentHealth <= maxHealth * lowHealthRatio;
     }
 }

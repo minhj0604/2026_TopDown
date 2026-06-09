@@ -15,7 +15,7 @@ MonoBehaviour:
   enemyName: Chaser
   sprite: {fileID: 0}
   color: {r: 0.35, g: 0.9, b: 0.45, a: 1}
-  maxHealth: 35
+  maxHealth: 130
   moveSpeed: 0.85
   contactDamage: 8
   contactDamageCooldown: 0.7

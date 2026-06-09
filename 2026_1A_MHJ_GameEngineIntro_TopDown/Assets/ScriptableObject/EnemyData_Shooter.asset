@@ -15,7 +15,7 @@ MonoBehaviour:
   enemyName: Shooter
   sprite: {fileID: 0}
   color: {r: 0.95, g: 0.75, b: 0.25, a: 1}
-  maxHealth: 25
+  maxHealth: 110
   moveSpeed: 0.65
   contactDamage: 6
   contactDamageCooldown: 0.7

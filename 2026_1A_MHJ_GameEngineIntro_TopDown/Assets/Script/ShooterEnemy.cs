@@ -13,12 +13,14 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
     [SerializeField] private Color groggyColor = new Color(1f, 0.9f, 0.2f, 1f);
     [SerializeField] private float hitFlashTime = 0.08f;
     [SerializeField] private float knockbackTime = 0.12f;
+    [SerializeField] private float hitStunTime = 0.3f;
 
     public bool IsDead => currentHealth <= 0f;
 
     private static Sprite generatedSprite;
 
     private SpriteRenderer spriteRenderer;
+    private EnemyHealthBar healthBar;
     private Rigidbody2D rb;
     private Transform player;
     private DungeonRunManager dungeonRunManager;
@@ -28,6 +30,7 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
     private float hitFlashTimer;
     private float groggyTimer;
     private float knockbackTimer;
+    private float hitStunTimer;
     private Vector2 knockbackVelocity;
     private bool isTimeStopped;
     private Color normalColor;
@@ -35,6 +38,10 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
     private void Awake()
     {
         spriteRenderer = GetComponent<SpriteRenderer>();
+        healthBar = GetComponentInChildren<EnemyHealthBar>();
+        if (healthBar == null)
+            healthBar = new GameObject("HealthBar").AddComponent<EnemyHealthBar>();
+        healthBar.transform.SetParent(transform);
         rb = GetComponent<Rigidbody2D>();
         rb.gravityScale = 0f;
         rb.freezeRotation = true;
@@ -74,8 +81,10 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
 
         if (knockbackTimer > 0f)
             knockbackTimer -= Time.deltaTime;
+        if (hitStunTimer > 0f)
+            hitStunTimer -= Time.deltaTime;
 
-        if (CanStartShoot())
+        if (hitStunTimer <= 0f && CanStartShoot())
             shootRoutine = StartCoroutine(ShootRoutine());
     }
 
@@ -91,6 +100,7 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
             return;
         }
 
+        if (hitStunTimer > 0f) return;
         if (groggyTimer > 0f) return;
 
         Vector2 currentPosition = rb.position;
@@ -113,7 +123,11 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
         if (IsDead) return;
 
         currentHealth = Mathf.Max(0f, currentHealth - damage);
+        if (healthBar != null)
+            healthBar.SetValue(currentHealth, GetMaxHealth());
         StartKnockback(hitDirection);
+        hitStunTimer = hitStunTime;
+        StopShootRoutine();
 
         spriteRenderer.color = hitColor;
         hitFlashTimer = hitFlashTime;
@@ -128,12 +142,15 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
 
     public void ResetEnemy()
     {
-        currentHealth = enemyData != null ? enemyData.maxHealth : 25f;
+        currentHealth = GetMaxHealth();
+        if (healthBar != null)
+            healthBar.SetValue(currentHealth, GetMaxHealth());
         shootTimer = enemyData != null ? enemyData.shootInterval : 1.4f;
         StopShootRoutine();
         hitFlashTimer = 0f;
         groggyTimer = 0f;
         knockbackTimer = 0f;
+        hitStunTimer = 0f;
         knockbackVelocity = Vector2.zero;
         isTimeStopped = false;
         rb.linearVelocity = Vector2.zero;
@@ -214,6 +231,7 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
     }
 
     private float GetMoveSpeed() => enemyData != null ? enemyData.moveSpeed : 0.75f;
+    private float GetMaxHealth() => enemyData != null ? enemyData.maxHealth : 25f;
     private float GetProjectileDamage() => enemyData != null ? enemyData.projectileDamage : 7f;
     private float GetProjectileSpeed() => enemyData != null ? enemyData.projectileSpeed : 2.5f;
     private float GetKnockbackForce() => enemyData != null ? enemyData.knockbackForce : 2f;

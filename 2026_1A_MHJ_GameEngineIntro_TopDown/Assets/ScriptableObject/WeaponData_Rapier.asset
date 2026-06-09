@@ -21,37 +21,37 @@ MonoBehaviour:
   comboCount: 4
   comboSteps:
   - damageMultiplier: 1
-    speedMultiplier: 1
-    rangeMultiplier: 1
-    knockbackMultiplier: 0.9
+    speedMultiplier: 1.08
+    rangeMultiplier: 1.45
+    knockbackMultiplier: 1.45
     groggyTime: 0.05
-    comboDelay: 0.18
-    lungeDistance: 0.11
+    comboDelay: 0.34
+    lungeDistance: 0.03
     lungeTime: 0.07
   - damageMultiplier: 1
-    speedMultiplier: 1.05
-    rangeMultiplier: 1.05
-    knockbackMultiplier: 0.9
-    groggyTime: 0.05
-    comboDelay: 0.18
-    lungeDistance: 0.12
-    lungeTime: 0.07
+    speedMultiplier: 1.35
+    rangeMultiplier: 1.18
+    knockbackMultiplier: 0
+    groggyTime: 0.28
+    comboDelay: 0.09
+    lungeDistance: 0.02
+    lungeTime: 0.06
   - damageMultiplier: 0.8
-    speedMultiplier: 1.45
-    rangeMultiplier: 1.05
-    knockbackMultiplier: 0.8
-    groggyTime: 0.04
-    comboDelay: 0.2
-    lungeDistance: 0.13
+    speedMultiplier: 1.4
+    rangeMultiplier: 1.2
+    knockbackMultiplier: 2.35
+    groggyTime: 0.08
+    comboDelay: 0.62
+    lungeDistance: 0.04
     lungeTime: 0.06
   - damageMultiplier: 1.45
-    speedMultiplier: 0.95
-    rangeMultiplier: 1.2
-    knockbackMultiplier: 1.5
+    speedMultiplier: 0.9
+    rangeMultiplier: 1.45
+    knockbackMultiplier: 2.5
     groggyTime: 0.12
-    comboDelay: 0.3
-    lungeDistance: 0.2
-    lungeTime: 0.095
+    comboDelay: 0.42
+    lungeDistance: 0.26
+    lungeTime: 0.12
   watchSkillType: 1
   gaugeCost: 25
   weaponPrefab: {fileID: 0}

@@ -15,7 +15,7 @@ MonoBehaviour:
   enemyName: Charger
   sprite: {fileID: 0}
   color: {r: 0.95, g: 0.35, b: 0.35, a: 1}
-  maxHealth: 45
+  maxHealth: 160
   moveSpeed: 0.35
   contactDamage: 12
   contactDamageCooldown: 0.7

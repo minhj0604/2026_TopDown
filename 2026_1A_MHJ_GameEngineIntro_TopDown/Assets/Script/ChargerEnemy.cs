@@ -13,6 +13,7 @@ public class ChargerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
     [SerializeField] private Color groggyColor = new Color(1f, 0.9f, 0.2f, 1f);
     [SerializeField] private float hitFlashTime = 0.08f;
     [SerializeField] private float knockbackTime = 0.12f;
+    [SerializeField] private float hitStunTime = 0.32f;
     [SerializeField] private float contactDamageCenterDistance = 0.38f;
 
     public bool IsDead => currentHealth <= 0f;
@@ -20,6 +21,7 @@ public class ChargerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
     private static Sprite generatedSprite;
 
     private SpriteRenderer spriteRenderer;
+    private EnemyHealthBar healthBar;
     private Rigidbody2D rb;
     private Transform player;
     private DungeonRunManager dungeonRunManager;
@@ -30,6 +32,7 @@ public class ChargerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
     private float hitFlashTimer;
     private float groggyTimer;
     private float knockbackTimer;
+    private float hitStunTimer;
     private Vector2 knockbackVelocity;
     private bool isTimeStopped;
     private Color normalColor;
@@ -37,6 +40,10 @@ public class ChargerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
     private void Awake()
     {
         spriteRenderer = GetComponent<SpriteRenderer>();
+        healthBar = GetComponentInChildren<EnemyHealthBar>();
+        if (healthBar == null)
+            healthBar = new GameObject("HealthBar").AddComponent<EnemyHealthBar>();
+        healthBar.transform.SetParent(transform);
         rb = GetComponent<Rigidbody2D>();
         rb.gravityScale = 0f;
         rb.freezeRotation = true;
@@ -78,8 +85,10 @@ public class ChargerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
 
         if (knockbackTimer > 0f)
             knockbackTimer -= Time.deltaTime;
+        if (hitStunTimer > 0f)
+            hitStunTimer -= Time.deltaTime;
 
-        if (CanStartCharge())
+        if (hitStunTimer <= 0f && CanStartCharge())
             chargeRoutine = StartCoroutine(ChargeRoutine());
     }
 
@@ -94,6 +103,7 @@ public class ChargerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
             return;
         }
 
+        if (hitStunTimer > 0f) return;
         if (groggyTimer > 0f) return;
 
         if (chargeRoutine != null) return;
@@ -116,6 +126,10 @@ public class ChargerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
         PlayerHealth playerHealth = other.GetComponent<PlayerHealth>();
         if (playerHealth == null) return;
 
+        PlayerCombat playerCombat = other.GetComponent<PlayerCombat>();
+        if (playerCombat != null && playerCombat.ShouldIgnoreContactDamageFrom(this))
+            return;
+
         if (Vector2.Distance(rb.position, playerHealth.transform.position) > contactDamageCenterDistance)
             return;
 
@@ -129,7 +143,10 @@ public class ChargerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
         if (IsDead) return;
 
         currentHealth = Mathf.Max(0f, currentHealth - damage);
+        if (healthBar != null)
+            healthBar.SetValue(currentHealth, GetMaxHealth());
         StartKnockback(hitDirection);
+        hitStunTimer = hitStunTime;
 
         spriteRenderer.color = hitColor;
         hitFlashTimer = hitFlashTime;
@@ -145,12 +162,15 @@ public class ChargerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
 
     public void ResetEnemy()
     {
-        currentHealth = enemyData != null ? enemyData.maxHealth : 40f;
+        currentHealth = GetMaxHealth();
+        if (healthBar != null)
+            healthBar.SetValue(currentHealth, GetMaxHealth());
         cooldownTimer = 0.5f;
         contactTimer = 0f;
         hitFlashTimer = 0f;
         groggyTimer = 0f;
         knockbackTimer = 0f;
+        hitStunTimer = 0f;
         knockbackVelocity = Vector2.zero;
         isTimeStopped = false;
         StopCharge();
@@ -236,6 +256,7 @@ public class ChargerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
     }
 
     private float GetChargeSpeed() => enemyData != null ? enemyData.chargeSpeed : 4f;
+    private float GetMaxHealth() => enemyData != null ? enemyData.maxHealth : 40f;
     private float GetKnockbackForce() => enemyData != null ? enemyData.knockbackForce : 2.5f;
 
     private void StartKnockback(Vector2 hitDirection)

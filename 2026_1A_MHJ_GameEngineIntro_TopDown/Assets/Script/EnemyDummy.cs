@@ -32,6 +32,7 @@ public class EnemyDummy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusRe
     private static Sprite generatedSprite;
 
     private SpriteRenderer spriteRenderer;
+    private EnemyHealthBar healthBar;
     private Rigidbody2D rb;
     private float currentHealth;
     private Coroutine flashRoutine;
@@ -44,6 +45,10 @@ public class EnemyDummy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusRe
     private void Awake()
     {
         spriteRenderer = GetComponent<SpriteRenderer>();
+        healthBar = GetComponentInChildren<EnemyHealthBar>();
+        if (healthBar == null)
+            healthBar = new GameObject("HealthBar").AddComponent<EnemyHealthBar>();
+        healthBar.transform.SetParent(transform);
         rb = GetComponent<Rigidbody2D>();
 
         currentHealth = maxHealth;
@@ -87,6 +92,8 @@ public class EnemyDummy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusRe
         if (IsDead) return;
 
         currentHealth = Mathf.Max(0f, currentHealth - damage);
+        if (healthBar != null)
+            healthBar.SetValue(currentHealth, maxHealth);
 
         if (hitDirection.sqrMagnitude > 0.01f)
             rb.AddForce(hitDirection.normalized * knockbackForce * Mathf.Max(1f, hitDirection.magnitude), ForceMode2D.Impulse);
@@ -109,6 +116,8 @@ public class EnemyDummy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusRe
     public void ResetHealth()
     {
         currentHealth = maxHealth;
+        if (healthBar != null)
+            healthBar.SetValue(currentHealth, maxHealth);
         spriteRenderer.color = normalColor;
         rb.simulated = true;
         isAttackActive = false;
@@ -206,6 +215,10 @@ public class EnemyDummy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusRe
 
         float distance = Vector2.Distance(transform.position, player.transform.position);
         if (distance > attackRange)
+            return false;
+
+        PlayerCombat playerCombat = player.GetComponent<PlayerCombat>();
+        if (playerCombat != null && playerCombat.ShouldIgnoreContactDamageFrom(this))
             return false;
 
         player.TakeDamage(attackDamage);
