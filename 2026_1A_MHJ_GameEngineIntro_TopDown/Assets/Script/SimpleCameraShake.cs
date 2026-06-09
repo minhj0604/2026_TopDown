@@ -12,6 +12,7 @@ public class SimpleCameraShake : MonoBehaviour
     private float baseOrthographicSize;
     private float targetOrthographicSize;
     private Coroutine zoomBounceRoutine;
+    private Coroutine roomClearZoomRoutine;
     private Coroutine actionLeadRoutine;
     private Vector3 lastOffset;
     private Vector3 lastActionLeadOffset;
@@ -130,6 +131,31 @@ public class SimpleCameraShake : MonoBehaviour
             zoomBounceRoutine = null;
     }
 
+    public void PlayRoomClearZoomOut(float zoomOutAmount, float zoomOutTime, float holdTime, float returnTime)
+    {
+        if (controlledCamera == null)
+            controlledCamera = GetComponent<Camera>();
+        if (controlledCamera == null)
+            return;
+
+        if (baseOrthographicSize <= 0f)
+            baseOrthographicSize = controlledCamera.orthographicSize;
+
+        if (zoomBounceRoutine != null)
+        {
+            StopCoroutine(zoomBounceRoutine);
+            zoomBounceRoutine = null;
+        }
+        if (roomClearZoomRoutine != null)
+            StopCoroutine(roomClearZoomRoutine);
+
+        roomClearZoomRoutine = StartCoroutine(RoomClearZoomRoutine(
+            Mathf.Max(0f, zoomOutAmount),
+            Mathf.Max(0.01f, zoomOutTime),
+            Mathf.Max(0f, holdTime),
+            Mathf.Max(0.01f, returnTime)));
+    }
+
     private void UpdateFocusZoom()
     {
         if (controlledCamera == null)
@@ -172,12 +198,42 @@ public class SimpleCameraShake : MonoBehaviour
         zoomBounceRoutine = null;
     }
 
+    private System.Collections.IEnumerator RoomClearZoomRoutine(float zoomOutAmount, float zoomOutTime, float holdTime, float returnTime)
+    {
+        float baseSize = baseOrthographicSize > 0f ? baseOrthographicSize : controlledCamera.orthographicSize;
+        float zoomedOutSize = baseSize + zoomOutAmount;
+        targetOrthographicSize = zoomedOutSize;
+
+        yield return ZoomStepUnscaled(controlledCamera.orthographicSize, zoomedOutSize, zoomOutTime);
+        if (holdTime > 0f)
+            yield return new WaitForSecondsRealtime(holdTime);
+
+        targetOrthographicSize = baseSize;
+        yield return ZoomStepUnscaled(controlledCamera.orthographicSize, baseSize, returnTime);
+
+        controlledCamera.orthographicSize = baseSize;
+        targetOrthographicSize = baseSize;
+        roomClearZoomRoutine = null;
+    }
+
     private System.Collections.IEnumerator ZoomStep(float from, float to, float duration)
     {
         float timer = 0f;
         while (timer < duration)
         {
             timer += Time.deltaTime;
+            float t = Mathf.Clamp01(timer / duration);
+            controlledCamera.orthographicSize = Mathf.Lerp(from, to, t);
+            yield return null;
+        }
+    }
+
+    private System.Collections.IEnumerator ZoomStepUnscaled(float from, float to, float duration)
+    {
+        float timer = 0f;
+        while (timer < duration)
+        {
+            timer += Time.unscaledDeltaTime;
             float t = Mathf.Clamp01(timer / duration);
             controlledCamera.orthographicSize = Mathf.Lerp(from, to, t);
             yield return null;

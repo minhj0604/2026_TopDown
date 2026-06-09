@@ -15,7 +15,7 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
     [SerializeField] private float knockbackTime = 0.12f;
     [SerializeField] private float hitStunTime = 0.3f;
 
-    public bool IsDead => currentHealth <= 0f;
+    public bool IsDead => currentHealth <= 0f && !isTimeStopped;
 
     private static Sprite generatedSprite;
 
@@ -33,6 +33,9 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
     private float hitStunTimer;
     private Vector2 knockbackVelocity;
     private bool isTimeStopped;
+    private bool pendingTimeStopHit;
+    private bool defeatHandled;
+    private Vector2 pendingTimeStopKnockback;
     private Color normalColor;
 
     private void Awake()
@@ -125,6 +128,18 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
         currentHealth = Mathf.Max(0f, currentHealth - damage);
         if (healthBar != null)
             healthBar.SetValue(currentHealth, GetMaxHealth());
+
+        if (isTimeStopped)
+        {
+            pendingTimeStopHit = true;
+            if (hitDirection.sqrMagnitude > pendingTimeStopKnockback.sqrMagnitude)
+                pendingTimeStopKnockback = hitDirection;
+            StopShootRoutine();
+            spriteRenderer.color = hitColor;
+            hitFlashTimer = hitFlashTime;
+            return;
+        }
+
         StartKnockback(hitDirection);
         hitStunTimer = hitStunTime;
         StopShootRoutine();
@@ -133,11 +148,7 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
         hitFlashTimer = hitFlashTime;
 
         if (IsDead)
-        {
-            rb.linearVelocity = Vector2.zero;
-            spriteRenderer.color = hitColor;
-            Debug.Log($"{name} defeated.", this);
-        }
+            HandleDefeat();
     }
 
     public void ResetEnemy()
@@ -153,6 +164,9 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
         hitStunTimer = 0f;
         knockbackVelocity = Vector2.zero;
         isTimeStopped = false;
+        pendingTimeStopHit = false;
+        defeatHandled = false;
+        pendingTimeStopKnockback = Vector2.zero;
         rb.linearVelocity = Vector2.zero;
         ApplyData();
     }
@@ -163,6 +177,24 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
 
         isTimeStopped = isStopped;
         rb.linearVelocity = Vector2.zero;
+
+        if (!isTimeStopped)
+        {
+            if (pendingTimeStopHit)
+            {
+                StartKnockback(pendingTimeStopKnockback);
+                hitStunTimer = hitStunTime;
+                pendingTimeStopHit = false;
+                pendingTimeStopKnockback = Vector2.zero;
+            }
+
+            if (currentHealth <= 0f)
+            {
+                HandleDefeat();
+                return;
+            }
+        }
+
         RefreshColor();
     }
 
@@ -253,6 +285,17 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
             spriteRenderer.color = groggyColor;
         else
             spriteRenderer.color = normalColor;
+    }
+
+    private void HandleDefeat()
+    {
+        if (defeatHandled)
+            return;
+
+        defeatHandled = true;
+        rb.linearVelocity = Vector2.zero;
+        spriteRenderer.color = hitColor;
+        Debug.Log($"{name} defeated.", this);
     }
 
     private bool CanAct()

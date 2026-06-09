@@ -1,6 +1,7 @@
 using System.Collections;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using System;
 
 [RequireComponent(typeof(Rigidbody2D))]
 public class PlayerDodge : MonoBehaviour
@@ -13,6 +14,8 @@ public class PlayerDodge : MonoBehaviour
     [SerializeField] private float successSlowTime = 0.18f;
 
     public bool IsDodging => isDodging;
+    public bool HasJustDodge => justDodgeTimer > 0f;
+    public event Action JustDodged;
 
     private Rigidbody2D rb;
     private PlayerController controller;
@@ -72,6 +75,7 @@ public class PlayerDodge : MonoBehaviour
             justDodgeTimer = justDodgeValidTime;
             if (clockOutput != null)
                 clockOutput.GainFromDodge();
+            JustDodged?.Invoke();
             StartCoroutine(SlowRoutine());
             Debug.Log("Just Dodge.", this);
         }
@@ -101,16 +105,25 @@ public class PlayerDodge : MonoBehaviour
 
     private bool IsEnemyAttackNear()
     {
-        EnemyDummy[] enemies = FindObjectsByType<EnemyDummy>(FindObjectsSortMode.None);
+        MonoBehaviour[] behaviours = FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None);
         Vector2 playerPosition = transform.position;
 
-        for (int i = 0; i < enemies.Length; i++)
+        for (int i = 0; i < behaviours.Length; i++)
         {
-            if (enemies[i] == null || enemies[i].IsDead || !enemies[i].IsAttackActive)
+            MonoBehaviour behaviour = behaviours[i];
+            if (behaviour == null)
                 continue;
 
-            float range = Mathf.Max(justDodgeCheckRange, enemies[i].AttackRange);
-            float distance = Vector2.Distance(playerPosition, enemies[i].transform.position);
+            IParryableEnemyAttack enemyAttack = behaviour as IParryableEnemyAttack;
+            if (enemyAttack == null || !enemyAttack.IsParryableAttackActive)
+                continue;
+
+            IRoomEnemy roomEnemy = behaviour as IRoomEnemy;
+            if (roomEnemy != null && roomEnemy.IsDead)
+                continue;
+
+            float distance = Vector2.Distance(playerPosition, behaviour.transform.position);
+            float range = justDodgeCheckRange;
             if (distance <= range)
                 return true;
         }
@@ -123,6 +136,7 @@ public class PlayerDodge : MonoBehaviour
         float previousScale = Time.timeScale;
         Time.timeScale = successSlowScale;
         yield return new WaitForSecondsRealtime(successSlowTime);
-        Time.timeScale = previousScale;
+        if (Mathf.Approximately(Time.timeScale, successSlowScale))
+            Time.timeScale = previousScale;
     }
 }

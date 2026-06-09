@@ -4,43 +4,61 @@ using UnityEngine.InputSystem;
 
 public class PlayerParry : MonoBehaviour
 {
-    [SerializeField] private float parryCheckRange = 0.85f;
     [SerializeField] private float counterReadyTime = 1f;
     [SerializeField] private float successSlowScale = 0.35f;
     [SerializeField] private float successSlowTime = 0.18f;
+    [SerializeField] private float successInvincibleTime = 0.22f;
+    [SerializeField] private float successShakeTime = 0.09f;
+    [SerializeField] private float successShakePower = 0.055f;
 
     public bool HasCounterReady => counterReadyTimer > 0f;
+    public MonoBehaviour LastParriedTarget => lastParriedTarget;
 
     private ClockOutputSystem clockOutput;
+    private PlayerHealth health;
     private float counterReadyTimer;
+    private IParryableEnemyAttack lastParriedAttack;
+    private MonoBehaviour lastParriedTarget;
 
     private void Awake()
     {
         clockOutput = GetComponent<ClockOutputSystem>();
+        health = GetComponent<PlayerHealth>();
     }
 
     private void Update()
     {
         if (counterReadyTimer > 0f)
             counterReadyTimer -= Time.deltaTime;
+        if (lastParriedAttack != null && !lastParriedAttack.IsParryableAttackActive)
+            lastParriedAttack = null;
     }
 
     public void OnInteract(InputValue value)
     {
-        if (!value.isPressed) return;
+        // Parry is triggered by the player's attack hitbox, not by pressing E.
+    }
 
-        if (IsEnemyAttackNear())
-        {
-            counterReadyTimer = counterReadyTime;
-            if (clockOutput != null)
-                clockOutput.GainFromParry();
-            StartCoroutine(SlowRoutine());
-            Debug.Log("Parry Success.", this);
-        }
-        else
-        {
-            Debug.Log("Parry Miss.", this);
-        }
+    public bool TryParryAttack(IParryableEnemyAttack enemyAttack, MonoBehaviour enemyBehaviour, Vector2 parryDirection)
+    {
+        if (enemyAttack == null) return false;
+        if (!enemyAttack.IsParryableAttackActive) return false;
+        if (enemyAttack == lastParriedAttack) return false;
+
+        lastParriedAttack = enemyAttack;
+        lastParriedTarget = enemyBehaviour;
+        counterReadyTimer = counterReadyTime;
+        enemyAttack.OnParried(parryDirection);
+
+        if (clockOutput != null)
+            clockOutput.GainFromParry();
+        if (health != null)
+            health.MakeInvincible(successInvincibleTime);
+
+        ShakeCameraOnSuccess();
+        StartCoroutine(SlowRoutine());
+        Debug.Log("Attack Parry Success.", this);
+        return true;
     }
 
     public bool ConsumeCounterReady()
@@ -52,23 +70,16 @@ public class PlayerParry : MonoBehaviour
         return true;
     }
 
-    private bool IsEnemyAttackNear()
+    private void ShakeCameraOnSuccess()
     {
-        EnemyDummy[] enemies = FindObjectsByType<EnemyDummy>(FindObjectsSortMode.None);
-        Vector2 playerPosition = transform.position;
+        Camera mainCamera = Camera.main;
+        if (mainCamera == null) return;
 
-        for (int i = 0; i < enemies.Length; i++)
-        {
-            if (enemies[i] == null || enemies[i].IsDead || !enemies[i].IsAttackActive)
-                continue;
+        SimpleCameraShake shake = mainCamera.GetComponent<SimpleCameraShake>();
+        if (shake == null)
+            shake = mainCamera.gameObject.AddComponent<SimpleCameraShake>();
 
-            float range = Mathf.Max(parryCheckRange, enemies[i].AttackRange);
-            float distance = Vector2.Distance(playerPosition, enemies[i].transform.position);
-            if (distance <= range)
-                return true;
-        }
-
-        return false;
+        shake.Shake(successShakeTime, successShakePower);
     }
 
     private IEnumerator SlowRoutine()
@@ -76,6 +87,7 @@ public class PlayerParry : MonoBehaviour
         float previousScale = Time.timeScale;
         Time.timeScale = successSlowScale;
         yield return new WaitForSecondsRealtime(successSlowTime);
-        Time.timeScale = previousScale;
+        if (Mathf.Approximately(Time.timeScale, successSlowScale))
+            Time.timeScale = previousScale;
     }
 }

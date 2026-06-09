@@ -42,6 +42,8 @@ public class PlayerCombat : MonoBehaviour
     [SerializeField] private float rapierThrustWidth = 0.22f;
     [SerializeField] private float scytheSlashAngle = 178f;
     [SerializeField] private float scytheSlashTilt = 12f;
+    [SerializeField] private float parryHitboxMultiplier = 1.45f;
+    [SerializeField] private float minimumParryHitboxRadius = 0.65f;
     [SerializeField] private bool showDebugHitArea = true;
 
     [Header("Exoskeleton Focus")]
@@ -49,6 +51,7 @@ public class PlayerCombat : MonoBehaviour
     [SerializeField] private float focusStopDistance = 0.38f;
     [SerializeField] private float focusChaseSpeed = 6.5f;
     [SerializeField] private float focusChaseMaxTime = 0.28f;
+    [SerializeField] private float focusChaseInvincibleTime = 0.35f;
     [SerializeField] private float focusCameraZoomPerHit = 0.015f;
     [SerializeField] private float focusCameraMaxZoomIn = 0.08f;
 
@@ -65,12 +68,6 @@ public class PlayerCombat : MonoBehaviour
     [SerializeField] private float scytheEarlyShakePower = 0.028f;
     [SerializeField] private float scytheFinalShakeTime = 0.17f;
     [SerializeField] private float scytheFinalShakePower = 0.08f;
-    [SerializeField] private float scytheReturnHideTime = 0.16f;
-    [SerializeField] private float scytheReturnInvincibleTime = 0.35f;
-    [SerializeField] private float scytheReturnCameraLeadDistance = 0.38f;
-    [SerializeField] private float scytheReturnCameraLeadTime = 0.24f;
-    [SerializeField] private float scytheReturnBlinkShakeTime = 0.06f;
-    [SerializeField] private float scytheReturnBlinkShakePower = 0.035f;
 
     [Header("Action Camera Lead")]
     [SerializeField] private float focusChaseCameraLeadDistance = 0.18f;
@@ -103,6 +100,8 @@ public class PlayerCombat : MonoBehaviour
     private Animator animator;
     private PlayerController controller;
     private PlayerPermanentProgress permanentProgress;
+    private PlayerParry parry;
+    private PlayerHealth health;
     private Rigidbody2D rb;
     private int comboStep = 0;
     private bool isAttacking = false;
@@ -128,8 +127,6 @@ public class PlayerCombat : MonoBehaviour
     private int attackSerial = 0;
     private bool focusChaseContactGuard = false;
     private bool focusFinalHitLanded = false;
-    private bool scytheReturnPositionValid = false;
-    private Vector2 scytheReturnPosition;
     private WeaponData[] lobbyWeaponPool;
     private MonoBehaviour focusTarget;
 
@@ -141,6 +138,8 @@ public class PlayerCombat : MonoBehaviour
         animator = GetComponent<Animator>();
         controller = GetComponent<PlayerController>();
         permanentProgress = GetComponent<PlayerPermanentProgress>();
+        parry = GetComponent<PlayerParry>();
+        health = GetComponent<PlayerHealth>();
         rb = GetComponent<Rigidbody2D>();
         clockOutput = GetComponent<ClockOutputSystem>();
 
@@ -434,6 +433,7 @@ public class PlayerCombat : MonoBehaviour
         hasExecutedHitThisAttack = true;
         GetCurrentHitArea(out Vector2 hitCenter, out float radius);
         ShowHitboxFlash(hitCenter, radius);
+        TryParryEnemyAttackInArea(hitCenter, radius);
 
         int hitCount = Physics2D.OverlapCircleNonAlloc(hitCenter, radius, hitBuffer, hitLayers);
         damagedTargets.Clear();
@@ -445,6 +445,7 @@ public class PlayerCombat : MonoBehaviour
             if (!IsColliderInsideCurrentHitShape(hitCollider, hitCenter, radius)) continue;
 
             MonoBehaviour[] behaviours = hitCollider.GetComponentsInParent<MonoBehaviour>();
+
             foreach (MonoBehaviour behaviour in behaviours)
             {
                 IDamageable damageable = behaviour as IDamageable;
@@ -503,6 +504,57 @@ public class PlayerCombat : MonoBehaviour
             else
                 ShakeCameraOnHit();
         }
+    }
+
+    private bool TryParryEnemyAttackInArea(Vector2 hitCenter, float attackRadius)
+    {
+        if (parry == null)
+            return false;
+
+        float parryRadius = Mathf.Max(attackRadius * parryHitboxMultiplier, minimumParryHitboxRadius);
+        int parryHitCount = Physics2D.OverlapCircleNonAlloc(hitCenter, parryRadius, hitBuffer, hitLayers);
+
+        for (int i = 0; i < parryHitCount; i++)
+        {
+            Collider2D hitCollider = hitBuffer[i];
+            if (hitCollider == null) continue;
+
+            MonoBehaviour[] behaviours = hitCollider.GetComponentsInParent<MonoBehaviour>();
+            if (TryParryEnemyAttack(behaviours))
+                return true;
+        }
+
+        return false;
+    }
+
+    private bool TryParryEnemyAttack(MonoBehaviour[] behaviours)
+    {
+        if (behaviours == null)
+            return false;
+
+        for (int i = 0; i < behaviours.Length; i++)
+        {
+            if (TryParryEnemyAttack(behaviours[i]))
+                return true;
+        }
+
+        return false;
+    }
+
+    private bool TryParryEnemyAttack(MonoBehaviour behaviour)
+    {
+        if (parry == null || behaviour == null)
+            return false;
+
+        IParryableEnemyAttack parryableAttack = behaviour as IParryableEnemyAttack;
+        if (parryableAttack == null)
+            return false;
+
+        Vector2 parryDirection = behaviour.transform.position - transform.position;
+        if (parryDirection.sqrMagnitude <= 0.01f)
+            parryDirection = attackDirection;
+
+        return parry.TryParryAttack(parryableAttack, behaviour, parryDirection.normalized);
     }
 
     public void OnAttackAnimationEnd()
@@ -566,8 +618,6 @@ public class PlayerCombat : MonoBehaviour
 
         yield return new WaitForSeconds(comboEndRecoveryTime);
 
-        yield return BlinkBackAfterScytheFinal();
-
         bool shouldBounceCameraBack = focusFinalHitLanded && (IsExoskeletonFinalHit() || IsRapierFinalHit());
         bool shouldSmoothCameraBack = focusFinalHitLanded && IsScytheFinalHit();
         ClearFocusTarget(shouldBounceCameraBack, !shouldBounceCameraBack && !shouldSmoothCameraBack);
@@ -610,7 +660,6 @@ public class PlayerCombat : MonoBehaviour
             StopCoroutine(focusChaseRoutine);
             focusChaseRoutine = null;
         }
-        scytheReturnPositionValid = false;
         if (clearQueuedAttack && focusTarget != null)
             ClearFocusTarget(false, true);
 
@@ -736,7 +785,9 @@ public class PlayerCombat : MonoBehaviour
 
         float timer = 0f;
         focusChaseContactGuard = true;
-        SaveScytheReturnPosition();
+        if (health != null)
+            health.MakeInvincible(focusChaseInvincibleTime);
+
         ApplyFocusChaseCameraLead();
 
         while (IsCurrentFocusActive() && timer < focusChaseMaxTime)
@@ -1058,57 +1109,6 @@ public class PlayerCombat : MonoBehaviour
     private bool IsScytheFinalHit()
     {
         return IsCurrentWeaponScythe() && comboStep >= GetCurrentMaxCombo();
-    }
-
-    private void SaveScytheReturnPosition()
-    {
-        if (!IsScytheFinalHit()) return;
-
-        scytheReturnPosition = rb != null ? rb.position : (Vector2)transform.position;
-        scytheReturnPositionValid = true;
-    }
-
-    private IEnumerator BlinkBackAfterScytheFinal()
-    {
-        if (!scytheReturnPositionValid || rb == null)
-            yield break;
-
-        Vector2 currentPosition = rb.position;
-        Vector2 returnDirection = scytheReturnPosition - currentPosition;
-        ApplyScytheReturnCameraLead(returnDirection);
-
-        SpriteRenderer spriteRenderer = GetComponent<SpriteRenderer>();
-        if (spriteRenderer != null)
-            spriteRenderer.enabled = false;
-
-        yield return new WaitForSeconds(scytheReturnHideTime);
-
-        rb.position = scytheReturnPosition;
-        scytheReturnPositionValid = false;
-
-        PlayerHealth health = GetComponent<PlayerHealth>();
-        if (health != null)
-            health.MakeInvincible(scytheReturnInvincibleTime);
-
-        if (spriteRenderer != null)
-            spriteRenderer.enabled = true;
-
-        ShakeCamera(scytheReturnBlinkShakeTime, scytheReturnBlinkShakePower);
-    }
-
-    private void ApplyScytheReturnCameraLead(Vector2 direction)
-    {
-        if (direction.sqrMagnitude <= 0.01f)
-            return;
-
-        Camera mainCamera = Camera.main;
-        if (mainCamera == null) return;
-
-        SimpleCameraShake cameraControl = mainCamera.GetComponent<SimpleCameraShake>();
-        if (cameraControl == null)
-            cameraControl = mainCamera.gameObject.AddComponent<SimpleCameraShake>();
-
-        cameraControl.LeadToward(direction, scytheReturnCameraLeadDistance, scytheReturnCameraLeadTime);
     }
 
     private void ApplyShortGroggy(MonoBehaviour hitBehaviour)

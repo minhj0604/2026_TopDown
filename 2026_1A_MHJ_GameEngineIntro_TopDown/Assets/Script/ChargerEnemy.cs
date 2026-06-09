@@ -4,7 +4,7 @@ using UnityEngine;
 [RequireComponent(typeof(SpriteRenderer))]
 [RequireComponent(typeof(BoxCollider2D))]
 [RequireComponent(typeof(Rigidbody2D))]
-public class ChargerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusReceiver
+public class ChargerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusReceiver, IParryableEnemyAttack
 {
     [SerializeField] private EnemyData enemyData;
     [SerializeField] private Color prepareColor = new Color(1f, 0.45f, 0.15f, 1f);
@@ -14,9 +14,13 @@ public class ChargerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
     [SerializeField] private float hitFlashTime = 0.08f;
     [SerializeField] private float knockbackTime = 0.12f;
     [SerializeField] private float hitStunTime = 0.32f;
+    [SerializeField] private float parriedStunTime = 0.7f;
+    [SerializeField] private float parriedGroggyTime = 1.1f;
+    [SerializeField] private float parriedKnockbackMultiplier = 3.5f;
     [SerializeField] private float contactDamageCenterDistance = 0.38f;
 
-    public bool IsDead => currentHealth <= 0f;
+    public bool IsDead => currentHealth <= 0f && !isTimeStopped;
+    public bool IsParryableAttackActive => isCharging && !IsDead && !isTimeStopped && groggyTimer <= 0f;
 
     private static Sprite generatedSprite;
 
@@ -35,6 +39,10 @@ public class ChargerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
     private float hitStunTimer;
     private Vector2 knockbackVelocity;
     private bool isTimeStopped;
+    private bool isCharging;
+    private bool pendingTimeStopHit;
+    private bool defeatHandled;
+    private Vector2 pendingTimeStopKnockback;
     private Color normalColor;
 
     private void Awake()
@@ -121,7 +129,7 @@ public class ChargerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
     private void OnTriggerStay2D(Collider2D other)
     {
         if (!CanAct()) return;
-        if (IsDead || contactTimer > 0f) return;
+        if (IsDead || isTimeStopped || contactTimer > 0f) return;
 
         PlayerHealth playerHealth = other.GetComponent<PlayerHealth>();
         if (playerHealth == null) return;
@@ -145,6 +153,18 @@ public class ChargerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
         currentHealth = Mathf.Max(0f, currentHealth - damage);
         if (healthBar != null)
             healthBar.SetValue(currentHealth, GetMaxHealth());
+
+        if (isTimeStopped)
+        {
+            pendingTimeStopHit = true;
+            if (hitDirection.sqrMagnitude > pendingTimeStopKnockback.sqrMagnitude)
+                pendingTimeStopKnockback = hitDirection;
+            StopCharge();
+            spriteRenderer.color = hitColor;
+            hitFlashTimer = hitFlashTime;
+            return;
+        }
+
         StartKnockback(hitDirection);
         hitStunTimer = hitStunTime;
 
@@ -152,12 +172,7 @@ public class ChargerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
         hitFlashTimer = hitFlashTime;
 
         if (IsDead)
-        {
-            StopCharge();
-            rb.linearVelocity = Vector2.zero;
-            spriteRenderer.color = hitColor;
-            Debug.Log($"{name} defeated.", this);
-        }
+            HandleDefeat();
     }
 
     public void ResetEnemy()
@@ -173,6 +188,10 @@ public class ChargerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
         hitStunTimer = 0f;
         knockbackVelocity = Vector2.zero;
         isTimeStopped = false;
+        isCharging = false;
+        pendingTimeStopHit = false;
+        defeatHandled = false;
+        pendingTimeStopKnockback = Vector2.zero;
         StopCharge();
         rb.linearVelocity = Vector2.zero;
         ApplyData();
@@ -185,6 +204,24 @@ public class ChargerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
         isTimeStopped = isStopped;
         if (isStopped)
             rb.linearVelocity = Vector2.zero;
+
+        if (!isTimeStopped)
+        {
+            if (pendingTimeStopHit)
+            {
+                StartKnockback(pendingTimeStopKnockback);
+                hitStunTimer = hitStunTime;
+                pendingTimeStopHit = false;
+                pendingTimeStopKnockback = Vector2.zero;
+            }
+
+            if (currentHealth <= 0f)
+            {
+                HandleDefeat();
+                return;
+            }
+        }
+
         RefreshColor();
     }
 
@@ -196,6 +233,21 @@ public class ChargerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
         StopCharge();
         rb.linearVelocity = Vector2.zero;
         RefreshColor();
+    }
+
+    public void OnParried(Vector2 parryDirection)
+    {
+        if (IsDead) return;
+
+        isCharging = false;
+        StopCharge();
+        cooldownTimer = enemyData != null ? enemyData.chargeCooldown : 1.4f;
+        hitStunTimer = Mathf.Max(hitStunTimer, parriedStunTime);
+        groggyTimer = Mathf.Max(groggyTimer, parriedGroggyTime);
+        hitFlashTimer = parriedGroggyTime;
+        rb.linearVelocity = Vector2.zero;
+        StartKnockback(parryDirection.normalized * parriedKnockbackMultiplier);
+        spriteRenderer.color = groggyColor;
     }
 
     private bool CanStartCharge()
@@ -225,6 +277,7 @@ public class ChargerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
 
         Vector2 direction = ((Vector2)player.position - rb.position).normalized;
         float chargeTimer = enemyData != null ? enemyData.chargeDuration : 0.35f;
+        isCharging = true;
         while (chargeTimer > 0f)
         {
             if (isTimeStopped || groggyTimer > 0f)
@@ -235,6 +288,7 @@ public class ChargerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
             yield return new WaitForFixedUpdate();
         }
 
+        isCharging = false;
         cooldownTimer = enemyData != null ? enemyData.chargeCooldown : 1.4f;
         chargeRoutine = null;
         rb.linearVelocity = Vector2.zero;
@@ -246,6 +300,7 @@ public class ChargerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
         if (chargeRoutine != null)
             StopCoroutine(chargeRoutine);
         chargeRoutine = null;
+        isCharging = false;
     }
 
     private void ApplyData()
@@ -277,6 +332,18 @@ public class ChargerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
             spriteRenderer.color = groggyColor;
         else
             spriteRenderer.color = normalColor;
+    }
+
+    private void HandleDefeat()
+    {
+        if (defeatHandled)
+            return;
+
+        defeatHandled = true;
+        StopCharge();
+        rb.linearVelocity = Vector2.zero;
+        spriteRenderer.color = hitColor;
+        Debug.Log($"{name} defeated.", this);
     }
 
     private bool CanAct()

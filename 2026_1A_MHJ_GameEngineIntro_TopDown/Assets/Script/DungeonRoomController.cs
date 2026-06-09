@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.Tilemaps;
+using System.Collections;
 
 public class DungeonRoomController : MonoBehaviour
 {
@@ -12,6 +13,11 @@ public class DungeonRoomController : MonoBehaviour
     [SerializeField] private int generatedRoomWidth = 10;
     [SerializeField] private int generatedRoomHeight = 7;
     [SerializeField] private float nonCombatCompleteDelay = 0.35f;
+    [SerializeField] private float combatClearSlowScale = 0.25f;
+    [SerializeField] private float combatClearSlowTime = 2.2f;
+    [SerializeField] private float combatClearZoomOutAmount = 0.18f;
+    [SerializeField] private float combatClearZoomOutTime = 2.2f;
+    [SerializeField] private float combatClearZoomReturnTime = 0.28f;
 
     private int lastDungeonLevel = -1;
     private int lastNodeIndex = -1;
@@ -24,9 +30,12 @@ public class DungeonRoomController : MonoBehaviour
     private ModuleRewardManager moduleRewardManager;
     private PlayerModuleInventory playerModuleInventory;
     private PlayerWallet playerWallet;
+    private float defaultFixedDeltaTime;
 
     private void Awake()
     {
+        defaultFixedDeltaTime = Time.fixedDeltaTime;
+
         if (dungeonRunManager == null)
             dungeonRunManager = FindFirstObjectByType<DungeonRunManager>();
         if (fallbackExitDoor == null)
@@ -195,13 +204,53 @@ public class DungeonRoomController : MonoBehaviour
 
         if (dungeonRunManager.IsCurrentNodeCombat && moduleRewardManager != null)
         {
-            GiveCombatClearGold();
-            moduleRewardManager.OfferReward(playerModuleInventory, dungeonRunManager.CurrentNodeType == DungeonNodeType.Elite, dungeonRunManager.CompleteCurrentNode);
+            StartCoroutine(CombatClearRoutine());
         }
         else
         {
             dungeonRunManager.CompleteCurrentNode();
         }
+    }
+
+    private IEnumerator CombatClearRoutine()
+    {
+        GiveCombatClearGold();
+        float clearSlowTime = Mathf.Max(2.2f, combatClearSlowTime);
+        float clearSlowScale = Mathf.Clamp(combatClearSlowScale, 0.08f, 0.35f);
+        PlayCombatClearCameraEffect(clearSlowTime);
+
+        Time.timeScale = clearSlowScale;
+        Time.fixedDeltaTime = defaultFixedDeltaTime * clearSlowScale;
+
+        yield return new WaitForSecondsRealtime(clearSlowTime);
+
+        Time.timeScale = 1f;
+        Time.fixedDeltaTime = defaultFixedDeltaTime;
+
+        moduleRewardManager.OfferReward(
+            playerModuleInventory,
+            dungeonRunManager.CurrentNodeType == DungeonNodeType.Elite,
+            dungeonRunManager.CompleteCurrentNode);
+    }
+
+    private void PlayCombatClearCameraEffect(float clearSlowTime)
+    {
+        Camera mainCamera = Camera.main;
+        if (mainCamera == null) return;
+
+        SimpleCameraShake cameraControl = mainCamera.GetComponent<SimpleCameraShake>();
+        if (cameraControl == null)
+            cameraControl = mainCamera.gameObject.AddComponent<SimpleCameraShake>();
+
+        float zoomOutAmount = Mathf.Min(combatClearZoomOutAmount, 0.18f);
+        float zoomOutTime = Mathf.Max(clearSlowTime, combatClearZoomOutTime);
+        float zoomReturnTime = Mathf.Clamp(combatClearZoomReturnTime, 0.16f, 0.35f);
+
+        cameraControl.PlayRoomClearZoomOut(
+            zoomOutAmount,
+            zoomOutTime,
+            0f,
+            zoomReturnTime);
     }
 
     private void GiveCombatClearGold()

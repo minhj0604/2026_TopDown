@@ -26,7 +26,7 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
     [SerializeField] private float wanderSpeedMultiplier = 0.45f;
     [SerializeField] private float wanderArriveDistance = 0.12f;
 
-    public bool IsDead => currentHealth <= 0f;
+    public bool IsDead => currentHealth <= 0f && !isTimeStopped;
 
     private static Sprite generatedSprite;
 
@@ -47,6 +47,9 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
     private float wanderTimer;
     private bool isChasing;
     private bool isTimeStopped;
+    private bool pendingTimeStopHit;
+    private bool defeatHandled;
+    private Vector2 pendingTimeStopKnockback;
     private Color normalColor = Color.white;
 
     private void Awake()
@@ -137,7 +140,7 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
     private void OnTriggerStay2D(Collider2D other)
     {
         if (!CanAct()) return;
-        if (IsDead || contactTimer > 0f) return;
+        if (IsDead || isTimeStopped || contactTimer > 0f) return;
 
         PlayerHealth playerHealth = other.GetComponent<PlayerHealth>();
         if (playerHealth == null) return;
@@ -162,6 +165,16 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
         if (healthBar != null)
             healthBar.SetValue(currentHealth, GetMaxHealth());
 
+        if (isTimeStopped)
+        {
+            pendingTimeStopHit = true;
+            if (hitDirection.sqrMagnitude > pendingTimeStopKnockback.sqrMagnitude)
+                pendingTimeStopKnockback = hitDirection;
+            spriteRenderer.color = hitColor;
+            hitFlashTimer = hitFlashTime;
+            return;
+        }
+
         StartKnockback(hitDirection);
         hitStunTimer = hitStunTime;
 
@@ -169,11 +182,7 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
         hitFlashTimer = hitFlashTime;
 
         if (IsDead)
-        {
-            rb.linearVelocity = Vector2.zero;
-            spriteRenderer.color = hitColor;
-            Debug.Log($"{name} defeated.", this);
-        }
+            HandleDefeat();
     }
 
     public void ResetEnemy()
@@ -191,6 +200,9 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
         wanderTimer = 0f;
         isChasing = false;
         isTimeStopped = false;
+        pendingTimeStopHit = false;
+        defeatHandled = false;
+        pendingTimeStopKnockback = Vector2.zero;
         rb.simulated = true;
         rb.linearVelocity = Vector2.zero;
         PickNewWanderTarget();
@@ -203,6 +215,24 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
 
         isTimeStopped = isStopped;
         rb.linearVelocity = Vector2.zero;
+
+        if (!isTimeStopped)
+        {
+            if (pendingTimeStopHit)
+            {
+                StartKnockback(pendingTimeStopKnockback);
+                hitStunTimer = hitStunTime;
+                pendingTimeStopHit = false;
+                pendingTimeStopKnockback = Vector2.zero;
+            }
+
+            if (currentHealth <= 0f)
+            {
+                HandleDefeat();
+                return;
+            }
+        }
+
         RefreshColor();
     }
 
@@ -338,6 +368,17 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
         }
 
         spriteRenderer.color = normalColor;
+    }
+
+    private void HandleDefeat()
+    {
+        if (defeatHandled)
+            return;
+
+        defeatHandled = true;
+        rb.linearVelocity = Vector2.zero;
+        spriteRenderer.color = hitColor;
+        Debug.Log($"{name} defeated.", this);
     }
 
     private bool CanAct()

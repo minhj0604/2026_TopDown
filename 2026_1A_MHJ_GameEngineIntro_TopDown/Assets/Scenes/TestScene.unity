@@ -225,7 +225,7 @@ Camera:
   far clip plane: 1000
   field of view: 34
   orthographic: 1
-  orthographic size: 1.5
+  orthographic size: 1.8
   m_Depth: -1
   m_CullingMask:
     serializedVersion: 2
@@ -9649,7 +9649,37 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   minimumHitRadius: 0.15
+  lungeStopDistanceFromEnemy: 0.28
+  rapierSlashAngle: 92
+  rapierSlashTilt: 16
+  rapierThrustWidth: 0.22
+  scytheSlashAngle: 178
+  scytheSlashTilt: 12
   showDebugHitArea: 1
+  focusKeepTime: 1.4
+  focusStopDistance: 0.38
+  focusChaseSpeed: 6.5
+  focusChaseMaxTime: 0.28
+  focusCameraZoomPerHit: 0.08
+  focusCameraMaxZoomIn: 0.32
+  rapierCameraZoomStep2: 0.018
+  rapierCameraZoomStep3: 0.038
+  rapierFinalShakeTime: 0.14
+  rapierFinalShakePower: 0.065
+  scytheCameraZoomStep1: 0.015
+  scytheCameraZoomStep2: 0.035
+  scytheEarlyShakeTime: 0.08
+  scytheEarlyShakePower: 0.028
+  scytheFinalShakeTime: 0.17
+  scytheFinalShakePower: 0.08
+  scytheReturnHideTime: 0.055
+  scytheReturnInvincibleTime: 0.35
+  scytheReturnCameraLeadDistance: 0.26
+  scytheReturnCameraLeadTime: 0.18
+  scytheReturnBlinkShakeTime: 0.06
+  scytheReturnBlinkShakePower: 0.035
+  focusChaseCameraLeadDistance: 0.18
+  focusChaseCameraLeadTime: 0.16
   showRangePreview: 1
   rangePreviewColor: {r: 1, g: 0.25, b: 0.15, a: 0.55}
   rangePreviewWidth: 0.03
@@ -9661,6 +9691,8 @@ MonoBehaviour:
   shakeCameraOnHit: 1
   hitShakeTime: 0.08
   hitShakePower: 0.035
+  exoskeletonFinalShakeTime: 0.16
+  exoskeletonFinalShakePower: 0.075
 --- !u!95 &1421788122
 Animator:
   serializedVersion: 7
@@ -9822,6 +9854,11 @@ MonoBehaviour:
   hurtKnockbackDistance: 0.18
   deathReturnDelay: 0.6
   hurtColor: {r: 1, g: 0.35, b: 0.35, a: 1}
+  lowHealthRatio: 0.3
+  lowHealthShakeInterval: 0.45
+  lowHealthShakeTime: 0.05
+  lowHealthShakePower: 0.018
+  lowHealthVignetteColor: {r: 0.8, g: 0, b: 0, a: 0.18}
   showDebugUI: 1
 --- !u!1001 &1483318681
 PrefabInstance:
@@ -10019,6 +10056,12 @@ MonoBehaviour:
   generatedRoomWidth: 10
   generatedRoomHeight: 7
   nonCombatCompleteDelay: 0.35
+  combatClearSlowScale: 0.25
+  combatClearSlowTime: 0.55
+  combatClearZoomOutAmount: 0.55
+  combatClearZoomOutTime: 0.12
+  combatClearZoomHoldTime: 0.18
+  combatClearZoomReturnTime: 0.28
 --- !u!114 &1800000005
 MonoBehaviour:
   m_ObjectHideFlags: 0
