@@ -15,3 +15,8 @@ public interface IParryableEnemyAttack
     bool IsParryableAttackActive { get; }
     void OnParried(UnityEngine.Vector2 parryDirection);
 }
+
+public interface IDodgeableEnemyAttack
+{
+    bool IsDodgeableAttackActiveFor(UnityEngine.Vector2 playerPosition);
+}

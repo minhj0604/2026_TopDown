@@ -4,13 +4,19 @@ using UnityEngine;
 [RequireComponent(typeof(SpriteRenderer))]
 [RequireComponent(typeof(BoxCollider2D))]
 [RequireComponent(typeof(Rigidbody2D))]
-public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusReceiver
+public class BombThrowerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusReceiver
 {
     [SerializeField] private EnemyData enemyData;
-    [SerializeField] private EnemyProjectile projectilePrefab;
+    [SerializeField] private ExplodingEnemyProjectile projectilePrefab;
+    [SerializeField] private Color prepareColor = new Color(1f, 0.65f, 0.15f, 1f);
     [SerializeField] private Color hitColor = new Color(1f, 0.25f, 0.2f, 1f);
     [SerializeField] private Color timeStopColor = new Color(0.25f, 0.8f, 1f, 1f);
     [SerializeField] private Color groggyColor = new Color(1f, 0.9f, 0.2f, 1f);
+    [SerializeField] private float throwInterval = 1.7f;
+    [SerializeField] private float throwPrepareTime = 0.45f;
+    [SerializeField] private float bombFuseTime = 1f;
+    [SerializeField] private float bombExplosionRadius = 0.75f;
+    [SerializeField] private float panicBackstepDistance = 1.45f;
     [SerializeField] private float hitFlashTime = 0.08f;
     [SerializeField] private float knockbackTime = 0.12f;
     [SerializeField] private float hitStunTime = 0.3f;
@@ -24,9 +30,9 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
     private Rigidbody2D rb;
     private Transform player;
     private DungeonRunManager dungeonRunManager;
-    private Coroutine shootRoutine;
+    private Coroutine throwRoutine;
     private float currentHealth;
-    private float shootTimer;
+    private float throwTimer;
     private float hitFlashTimer;
     private float groggyTimer;
     private float knockbackTimer;
@@ -45,6 +51,7 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
         if (healthBar == null)
             healthBar = new GameObject("HealthBar").AddComponent<EnemyHealthBar>();
         healthBar.transform.SetParent(transform);
+
         rb = GetComponent<Rigidbody2D>();
         rb.gravityScale = 0f;
         rb.freezeRotation = true;
@@ -65,37 +72,16 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
 
     private void Update()
     {
-        if (shootTimer > 0f)
-            shootTimer -= Time.deltaTime;
-
-        if (hitFlashTimer > 0f)
-        {
-            hitFlashTimer -= Time.deltaTime;
-            if (hitFlashTimer <= 0f && !IsDead)
-                RefreshColor();
-        }
-
-        if (groggyTimer > 0f)
-        {
-            groggyTimer -= Time.deltaTime;
-            if (groggyTimer <= 0f && !IsDead)
-                RefreshColor();
-        }
-
-        if (knockbackTimer > 0f)
-            knockbackTimer -= Time.deltaTime;
-        if (hitStunTimer > 0f)
-            hitStunTimer -= Time.deltaTime;
-
-        if (hitStunTimer <= 0f && CanStartShoot())
-            shootRoutine = StartCoroutine(ShootRoutine());
+        TickTimers();
+        if (hitStunTimer <= 0f && CanStartThrow())
+            throwRoutine = StartCoroutine(ThrowRoutine());
     }
 
     private void FixedUpdate()
     {
         if (!CanAct()) return;
         if (IsDead || player == null || isTimeStopped) return;
-        if (shootRoutine != null) return;
+        if (throwRoutine != null) return;
 
         if (knockbackTimer > 0f)
         {
@@ -103,22 +89,16 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
             return;
         }
 
-        if (hitStunTimer > 0f) return;
-        if (groggyTimer > 0f) return;
+        if (hitStunTimer > 0f || groggyTimer > 0f) return;
 
-        Vector2 currentPosition = rb.position;
-        Vector2 playerPosition = player.position;
-        Vector2 toPlayer = playerPosition - currentPosition;
+        Vector2 toPlayer = (Vector2)player.position - rb.position;
         float distance = toPlayer.magnitude;
-        float preferredDistance = enemyData != null ? enemyData.preferredDistance : 2f;
-
+        float preferredDistance = enemyData != null ? enemyData.preferredDistance : 2.4f;
         Vector2 moveDirection = Vector2.zero;
-        if (distance > preferredDistance + 0.2f)
-            moveDirection = toPlayer.normalized;
-        else if (distance < preferredDistance - 0.2f)
+        if (distance < Mathf.Min(preferredDistance - 0.25f, panicBackstepDistance))
             moveDirection = -toPlayer.normalized;
 
-        rb.MovePosition(currentPosition + moveDirection * GetMoveSpeed() * Time.fixedDeltaTime);
+        rb.MovePosition(rb.position + moveDirection * GetMoveSpeed() * Time.fixedDeltaTime);
     }
 
     public void TakeDamage(float damage, Vector2 hitPoint, Vector2 hitDirection)
@@ -134,7 +114,7 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
             pendingTimeStopHit = true;
             if (hitDirection.sqrMagnitude > pendingTimeStopKnockback.sqrMagnitude)
                 pendingTimeStopKnockback = hitDirection;
-            StopShootRoutine();
+            StopThrowRoutine();
             spriteRenderer.color = hitColor;
             hitFlashTimer = hitFlashTime;
             return;
@@ -142,8 +122,7 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
 
         StartKnockback(hitDirection);
         hitStunTimer = hitStunTime;
-        StopShootRoutine();
-
+        StopThrowRoutine();
         spriteRenderer.color = hitColor;
         hitFlashTimer = hitFlashTime;
 
@@ -156,8 +135,7 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
         currentHealth = GetMaxHealth();
         if (healthBar != null)
             healthBar.SetValue(currentHealth, GetMaxHealth());
-        shootTimer = enemyData != null ? enemyData.shootInterval : 1.4f;
-        StopShootRoutine();
+        throwTimer = throwInterval;
         hitFlashTimer = 0f;
         groggyTimer = 0f;
         knockbackTimer = 0f;
@@ -167,6 +145,7 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
         pendingTimeStopHit = false;
         defeatHandled = false;
         pendingTimeStopKnockback = Vector2.zero;
+        StopThrowRoutine();
         rb.linearVelocity = Vector2.zero;
         ApplyData();
     }
@@ -203,78 +182,89 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
         if (IsDead) return;
 
         groggyTimer = duration;
-        StopShootRoutine();
+        StopThrowRoutine();
         rb.linearVelocity = Vector2.zero;
         RefreshColor();
     }
 
-    private bool CanStartShoot()
-    {
-        if (!CanAct() || IsDead || player == null || isTimeStopped || groggyTimer > 0f || shootTimer > 0f || shootRoutine != null)
-            return false;
-
-        float distance = Vector2.Distance(rb.position, player.position);
-        float shootRange = enemyData != null ? enemyData.shootRange : 3.2f;
-        return distance <= shootRange;
-    }
-
-    private IEnumerator ShootRoutine()
+    private IEnumerator ThrowRoutine()
     {
         rb.linearVelocity = Vector2.zero;
-        yield return new WaitForSeconds(enemyData != null ? enemyData.shootStandTime : 0.25f);
+        spriteRenderer.color = prepareColor;
+        yield return new WaitForSeconds(throwPrepareTime);
 
-        int shotCount = enemyData != null ? Mathf.Max(1, enemyData.burstShotCount) : 3;
-        float interval = enemyData != null ? enemyData.burstShotInterval : 0.18f;
+        if (CanAct() && !IsDead && player != null && !isTimeStopped && groggyTimer <= 0f)
+            ThrowBomb();
 
-        for (int i = 0; i < shotCount; i++)
-        {
-            if (!CanAct() || IsDead || player == null || isTimeStopped || groggyTimer > 0f)
-                break;
-
-            ShootOneProjectile();
-            yield return new WaitForSeconds(interval);
-        }
-
-        shootTimer = enemyData != null ? enemyData.shootInterval : 1.4f;
-        shootRoutine = null;
+        throwTimer = throwInterval;
+        throwRoutine = null;
+        RefreshColor();
     }
 
-    private void ShootOneProjectile()
+    private void ThrowBomb()
     {
         Vector2 direction = ((Vector2)player.position - rb.position).normalized;
-        EnemyProjectile projectile;
+        ExplodingEnemyProjectile projectile;
         if (projectilePrefab != null)
         {
             projectile = Instantiate(projectilePrefab, rb.position, Quaternion.identity);
         }
         else
         {
-            GameObject projectileObject = new GameObject("EnemyProjectile");
+            GameObject projectileObject = new GameObject("ExplodingEnemyProjectile");
             projectileObject.transform.position = rb.position;
-            projectile = projectileObject.AddComponent<EnemyProjectile>();
+            projectile = projectileObject.AddComponent<ExplodingEnemyProjectile>();
         }
 
-        projectile.Launch(direction, GetProjectileSpeed(), GetProjectileDamage());
+        projectile.Launch(direction, enemyData != null ? enemyData.projectileSpeed : 2.2f, enemyData != null ? enemyData.projectileDamage : 10f, bombFuseTime, bombExplosionRadius);
     }
 
-    private void StopShootRoutine()
+    private bool CanStartThrow()
     {
-        if (shootRoutine != null)
-            StopCoroutine(shootRoutine);
-        shootRoutine = null;
+        if (!CanAct() || IsDead || player == null || isTimeStopped || groggyTimer > 0f || throwTimer > 0f || throwRoutine != null)
+            return false;
+
+        return Vector2.Distance(rb.position, player.position) <= (enemyData != null ? enemyData.shootRange : 3.2f);
+    }
+
+    private void TickTimers()
+    {
+        if (throwTimer > 0f)
+            throwTimer -= Time.deltaTime;
+        if (hitFlashTimer > 0f)
+        {
+            hitFlashTimer -= Time.deltaTime;
+            if (hitFlashTimer <= 0f && !IsDead)
+                RefreshColor();
+        }
+        if (groggyTimer > 0f)
+        {
+            groggyTimer -= Time.deltaTime;
+            if (groggyTimer <= 0f && !IsDead)
+                RefreshColor();
+        }
+        if (knockbackTimer > 0f)
+            knockbackTimer -= Time.deltaTime;
+        if (hitStunTimer > 0f)
+            hitStunTimer -= Time.deltaTime;
+    }
+
+    private void StopThrowRoutine()
+    {
+        if (throwRoutine != null)
+            StopCoroutine(throwRoutine);
+        throwRoutine = null;
     }
 
     private void ApplyData()
     {
-        normalColor = enemyData != null ? enemyData.color : new Color(0.95f, 0.75f, 0.25f, 1f);
+        normalColor = enemyData != null ? enemyData.color : new Color(0.95f, 0.55f, 0.2f, 1f);
         spriteRenderer.color = normalColor;
         spriteRenderer.sprite = enemyData != null && enemyData.sprite != null ? enemyData.sprite : GetGeneratedSprite();
     }
 
-    private float GetMoveSpeed() => enemyData != null ? enemyData.moveSpeed : 0.75f;
-    private float GetMaxHealth() => enemyData != null ? enemyData.maxHealth : 25f;
-    private float GetProjectileDamage() => enemyData != null ? enemyData.projectileDamage : 7f;
-    private float GetProjectileSpeed() => enemyData != null ? enemyData.projectileSpeed : 2.5f;
+    private float GetMaxHealth() => enemyData != null ? enemyData.maxHealth : 36f;
+    private float GetMoveSpeed() => enemyData != null ? enemyData.moveSpeed * 0.55f : 0.45f;
     private float GetKnockbackForce() => enemyData != null ? enemyData.knockbackForce : 2f;
 
     private void StartKnockback(Vector2 hitDirection)
@@ -302,6 +292,7 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
             return;
 
         defeatHandled = true;
+        StopThrowRoutine();
         rb.linearVelocity = Vector2.zero;
         spriteRenderer.color = hitColor;
         Debug.Log($"{name} defeated.", this);
@@ -329,7 +320,7 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
         texture.Apply();
 
         generatedSprite = Sprite.Create(texture, new Rect(0, 0, 48, 48), new Vector2(0.5f, 0.5f), 100f);
-        generatedSprite.name = "Generated Shooter Enemy Sprite";
+        generatedSprite.name = "Generated Bomb Thrower Enemy Sprite";
         return generatedSprite;
     }
 }

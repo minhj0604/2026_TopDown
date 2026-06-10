@@ -6,16 +6,18 @@ public class PlayerParry : MonoBehaviour
 {
     [SerializeField] private float counterReadyTime = 1f;
     [SerializeField] private float successSlowScale = 0.35f;
-    [SerializeField] private float successSlowTime = 0.18f;
+    [SerializeField] private float successSlowTime = 0.7f;
     [SerializeField] private float successInvincibleTime = 0.22f;
     [SerializeField] private float successShakeTime = 0.09f;
     [SerializeField] private float successShakePower = 0.055f;
+    [SerializeField] private float successToneTime = 0.7f;
 
     public bool HasCounterReady => counterReadyTimer > 0f;
     public MonoBehaviour LastParriedTarget => lastParriedTarget;
 
     private ClockOutputSystem clockOutput;
     private PlayerHealth health;
+    private CombatToneFeedback toneFeedback;
     private float counterReadyTimer;
     private IParryableEnemyAttack lastParriedAttack;
     private MonoBehaviour lastParriedTarget;
@@ -24,6 +26,9 @@ public class PlayerParry : MonoBehaviour
     {
         clockOutput = GetComponent<ClockOutputSystem>();
         health = GetComponent<PlayerHealth>();
+        toneFeedback = GetComponent<CombatToneFeedback>();
+        if (toneFeedback == null)
+            toneFeedback = gameObject.AddComponent<CombatToneFeedback>();
     }
 
     private void Update()
@@ -56,6 +61,8 @@ public class PlayerParry : MonoBehaviour
             health.MakeInvincible(successInvincibleTime);
 
         ShakeCameraOnSuccess();
+        if (toneFeedback != null)
+            toneFeedback.Play(successToneTime);
         StartCoroutine(SlowRoutine());
         Debug.Log("Attack Parry Success.", this);
         return true;

@@ -8,6 +8,10 @@ public class PlayerHealth : MonoBehaviour
     [SerializeField] private float hurtKnockbackDistance = 0.18f;
     [SerializeField] private float deathReturnDelay = 0.6f;
     [SerializeField] private Color hurtColor = new Color(1f, 0.35f, 0.35f, 1f);
+    [SerializeField] private float hurtCameraShakeTime = 0.13f;
+    [SerializeField] private float hurtCameraShakePower = 0.07f;
+    [SerializeField] private float invincibleBlinkInterval = 0.09f;
+    [SerializeField] private float invincibleBlinkAlpha = 0.45f;
 
     [Header("Low Health Feedback")]
     [SerializeField] private float lowHealthRatio = 0.3f;
@@ -31,6 +35,8 @@ public class PlayerHealth : MonoBehaviour
     private bool isReturningToLobby;
     private Texture2D vignetteTexture;
     private float lowHealthShakeTimer;
+    private float invincibleBlinkTimer;
+    private bool invincibleBlinkDimmed;
 
     private void Awake()
     {
@@ -47,8 +53,12 @@ public class PlayerHealth : MonoBehaviour
         if (invincibleTimer > 0f)
         {
             invincibleTimer -= Time.deltaTime;
-            if (invincibleTimer <= 0f && spriteRenderer != null)
-                spriteRenderer.color = normalColor;
+            UpdateInvincibleBlink();
+        }
+        else if (invincibleBlinkDimmed && spriteRenderer != null)
+        {
+            invincibleBlinkDimmed = false;
+            spriteRenderer.color = normalColor;
         }
 
         UpdateLowHealthCameraShake();
@@ -99,6 +109,8 @@ public class PlayerHealth : MonoBehaviour
     {
         currentHealth = maxHealth;
         invincibleTimer = 0f;
+        invincibleBlinkTimer = 0f;
+        invincibleBlinkDimmed = false;
         lowHealthShakeTimer = 0f;
         isReturningToLobby = false;
         if (spriteRenderer != null)
@@ -108,6 +120,7 @@ public class PlayerHealth : MonoBehaviour
     public void MakeInvincible(float duration)
     {
         invincibleTimer = Mathf.Max(invincibleTimer, duration);
+        invincibleBlinkTimer = 0f;
     }
 
     private void ApplyHitReaction(Vector2 hitDirection)
@@ -115,10 +128,46 @@ public class PlayerHealth : MonoBehaviour
         if (spriteRenderer != null)
             spriteRenderer.color = hurtColor;
 
+        ShakeCamera(hurtCameraShakeTime, hurtCameraShakePower);
+
         if (rb == null || hitDirection.sqrMagnitude <= 0.01f)
             return;
 
         rb.MovePosition(rb.position + hitDirection.normalized * hurtKnockbackDistance);
+    }
+
+    private void UpdateInvincibleBlink()
+    {
+        if (spriteRenderer == null)
+            return;
+
+        invincibleBlinkTimer -= Time.deltaTime;
+        if (invincibleBlinkTimer > 0f)
+            return;
+
+        invincibleBlinkTimer = invincibleBlinkInterval;
+        invincibleBlinkDimmed = !invincibleBlinkDimmed;
+        Color blinkColor = normalColor;
+        blinkColor.a = invincibleBlinkDimmed ? invincibleBlinkAlpha : normalColor.a;
+        spriteRenderer.color = blinkColor;
+
+        if (invincibleTimer <= 0f)
+        {
+            invincibleBlinkDimmed = false;
+            spriteRenderer.color = normalColor;
+        }
+    }
+
+    private void ShakeCamera(float duration, float power)
+    {
+        Camera mainCamera = Camera.main;
+        if (mainCamera == null) return;
+
+        SimpleCameraShake shake = mainCamera.GetComponent<SimpleCameraShake>();
+        if (shake == null)
+            shake = mainCamera.gameObject.AddComponent<SimpleCameraShake>();
+
+        shake.Shake(duration, power);
     }
 
     private IEnumerator ReturnToLobbyAfterDeath()

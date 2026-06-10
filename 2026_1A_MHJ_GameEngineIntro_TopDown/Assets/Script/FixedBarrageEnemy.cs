@@ -4,16 +4,19 @@ using UnityEngine;
 [RequireComponent(typeof(SpriteRenderer))]
 [RequireComponent(typeof(BoxCollider2D))]
 [RequireComponent(typeof(Rigidbody2D))]
-public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusReceiver
+public class FixedBarrageEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusReceiver
 {
     [SerializeField] private EnemyData enemyData;
     [SerializeField] private EnemyProjectile projectilePrefab;
+    [SerializeField] private Color fireColor = new Color(0.95f, 0.25f, 1f, 1f);
     [SerializeField] private Color hitColor = new Color(1f, 0.25f, 0.2f, 1f);
     [SerializeField] private Color timeStopColor = new Color(0.25f, 0.8f, 1f, 1f);
     [SerializeField] private Color groggyColor = new Color(1f, 0.9f, 0.2f, 1f);
+    [SerializeField] private int patternShotCount = 8;
+    [SerializeField] private float patternInterval = 1.4f;
+    [SerializeField] private float patternRotateDegrees = 18f;
+    [SerializeField] private float fireFlashTime = 0.08f;
     [SerializeField] private float hitFlashTime = 0.08f;
-    [SerializeField] private float knockbackTime = 0.12f;
-    [SerializeField] private float hitStunTime = 0.3f;
 
     public bool IsDead => currentHealth <= 0f && !isTimeStopped;
 
@@ -22,16 +25,12 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
     private SpriteRenderer spriteRenderer;
     private EnemyHealthBar healthBar;
     private Rigidbody2D rb;
-    private Transform player;
     private DungeonRunManager dungeonRunManager;
-    private Coroutine shootRoutine;
     private float currentHealth;
-    private float shootTimer;
+    private float patternTimer;
     private float hitFlashTimer;
     private float groggyTimer;
-    private float knockbackTimer;
-    private float hitStunTimer;
-    private Vector2 knockbackVelocity;
+    private float patternRotation;
     private bool isTimeStopped;
     private bool pendingTimeStopHit;
     private bool defeatHandled;
@@ -45,36 +44,31 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
         if (healthBar == null)
             healthBar = new GameObject("HealthBar").AddComponent<EnemyHealthBar>();
         healthBar.transform.SetParent(transform);
+
         rb = GetComponent<Rigidbody2D>();
         rb.gravityScale = 0f;
         rb.freezeRotation = true;
-        rb.linearDamping = 2f;
+        rb.linearDamping = 3f;
 
         BoxCollider2D boxCollider = GetComponent<BoxCollider2D>();
         boxCollider.isTrigger = true;
-        boxCollider.size = new Vector2(0.45f, 0.45f);
+        boxCollider.size = new Vector2(0.5f, 0.5f);
 
-        PlayerHealth playerHealth = FindFirstObjectByType<PlayerHealth>();
-        if (playerHealth != null)
-            player = playerHealth.transform;
         dungeonRunManager = FindFirstObjectByType<DungeonRunManager>();
-
         ApplyData();
         ResetEnemy();
     }
 
     private void Update()
     {
-        if (shootTimer > 0f)
-            shootTimer -= Time.deltaTime;
-
+        if (patternTimer > 0f)
+            patternTimer -= Time.deltaTime;
         if (hitFlashTimer > 0f)
         {
             hitFlashTimer -= Time.deltaTime;
             if (hitFlashTimer <= 0f && !IsDead)
                 RefreshColor();
         }
-
         if (groggyTimer > 0f)
         {
             groggyTimer -= Time.deltaTime;
@@ -82,43 +76,8 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
                 RefreshColor();
         }
 
-        if (knockbackTimer > 0f)
-            knockbackTimer -= Time.deltaTime;
-        if (hitStunTimer > 0f)
-            hitStunTimer -= Time.deltaTime;
-
-        if (hitStunTimer <= 0f && CanStartShoot())
-            shootRoutine = StartCoroutine(ShootRoutine());
-    }
-
-    private void FixedUpdate()
-    {
-        if (!CanAct()) return;
-        if (IsDead || player == null || isTimeStopped) return;
-        if (shootRoutine != null) return;
-
-        if (knockbackTimer > 0f)
-        {
-            rb.MovePosition(rb.position + knockbackVelocity * Time.fixedDeltaTime);
-            return;
-        }
-
-        if (hitStunTimer > 0f) return;
-        if (groggyTimer > 0f) return;
-
-        Vector2 currentPosition = rb.position;
-        Vector2 playerPosition = player.position;
-        Vector2 toPlayer = playerPosition - currentPosition;
-        float distance = toPlayer.magnitude;
-        float preferredDistance = enemyData != null ? enemyData.preferredDistance : 2f;
-
-        Vector2 moveDirection = Vector2.zero;
-        if (distance > preferredDistance + 0.2f)
-            moveDirection = toPlayer.normalized;
-        else if (distance < preferredDistance - 0.2f)
-            moveDirection = -toPlayer.normalized;
-
-        rb.MovePosition(currentPosition + moveDirection * GetMoveSpeed() * Time.fixedDeltaTime);
+        if (CanFire())
+            FirePattern();
     }
 
     public void TakeDamage(float damage, Vector2 hitPoint, Vector2 hitDirection)
@@ -132,21 +91,14 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
         if (isTimeStopped)
         {
             pendingTimeStopHit = true;
-            if (hitDirection.sqrMagnitude > pendingTimeStopKnockback.sqrMagnitude)
-                pendingTimeStopKnockback = hitDirection;
-            StopShootRoutine();
+            pendingTimeStopKnockback = hitDirection;
             spriteRenderer.color = hitColor;
             hitFlashTimer = hitFlashTime;
             return;
         }
 
-        StartKnockback(hitDirection);
-        hitStunTimer = hitStunTime;
-        StopShootRoutine();
-
         spriteRenderer.color = hitColor;
         hitFlashTimer = hitFlashTime;
-
         if (IsDead)
             HandleDefeat();
     }
@@ -156,13 +108,10 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
         currentHealth = GetMaxHealth();
         if (healthBar != null)
             healthBar.SetValue(currentHealth, GetMaxHealth());
-        shootTimer = enemyData != null ? enemyData.shootInterval : 1.4f;
-        StopShootRoutine();
+        patternTimer = 0.5f;
         hitFlashTimer = 0f;
         groggyTimer = 0f;
-        knockbackTimer = 0f;
-        hitStunTimer = 0f;
-        knockbackVelocity = Vector2.zero;
+        patternRotation = 0f;
         isTimeStopped = false;
         pendingTimeStopHit = false;
         defeatHandled = false;
@@ -182,8 +131,6 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
         {
             if (pendingTimeStopHit)
             {
-                StartKnockback(pendingTimeStopKnockback);
-                hitStunTimer = hitStunTime;
                 pendingTimeStopHit = false;
                 pendingTimeStopKnockback = Vector2.zero;
             }
@@ -201,47 +148,35 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
     public void ApplyGroggy(float duration)
     {
         if (IsDead) return;
-
         groggyTimer = duration;
-        StopShootRoutine();
         rb.linearVelocity = Vector2.zero;
         RefreshColor();
     }
 
-    private bool CanStartShoot()
+    private bool CanFire()
     {
-        if (!CanAct() || IsDead || player == null || isTimeStopped || groggyTimer > 0f || shootTimer > 0f || shootRoutine != null)
-            return false;
-
-        float distance = Vector2.Distance(rb.position, player.position);
-        float shootRange = enemyData != null ? enemyData.shootRange : 3.2f;
-        return distance <= shootRange;
+        return CanAct() && !IsDead && !isTimeStopped && groggyTimer <= 0f && patternTimer <= 0f;
     }
 
-    private IEnumerator ShootRoutine()
+    private void FirePattern()
     {
-        rb.linearVelocity = Vector2.zero;
-        yield return new WaitForSeconds(enemyData != null ? enemyData.shootStandTime : 0.25f);
+        spriteRenderer.color = fireColor;
+        hitFlashTimer = fireFlashTime;
 
-        int shotCount = enemyData != null ? Mathf.Max(1, enemyData.burstShotCount) : 3;
-        float interval = enemyData != null ? enemyData.burstShotInterval : 0.18f;
-
-        for (int i = 0; i < shotCount; i++)
+        int count = Mathf.Max(1, patternShotCount);
+        for (int i = 0; i < count; i++)
         {
-            if (!CanAct() || IsDead || player == null || isTimeStopped || groggyTimer > 0f)
-                break;
-
-            ShootOneProjectile();
-            yield return new WaitForSeconds(interval);
+            float angle = patternRotation + 360f * i / count;
+            Vector2 direction = new Vector2(Mathf.Cos(angle * Mathf.Deg2Rad), Mathf.Sin(angle * Mathf.Deg2Rad));
+            SpawnProjectile(direction);
         }
 
-        shootTimer = enemyData != null ? enemyData.shootInterval : 1.4f;
-        shootRoutine = null;
+        patternRotation += patternRotateDegrees;
+        patternTimer = patternInterval;
     }
 
-    private void ShootOneProjectile()
+    private void SpawnProjectile(Vector2 direction)
     {
-        Vector2 direction = ((Vector2)player.position - rb.position).normalized;
         EnemyProjectile projectile;
         if (projectilePrefab != null)
         {
@@ -254,37 +189,17 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
             projectile = projectileObject.AddComponent<EnemyProjectile>();
         }
 
-        projectile.Launch(direction, GetProjectileSpeed(), GetProjectileDamage());
-    }
-
-    private void StopShootRoutine()
-    {
-        if (shootRoutine != null)
-            StopCoroutine(shootRoutine);
-        shootRoutine = null;
+        projectile.Launch(direction, enemyData != null ? enemyData.projectileSpeed : 2.3f, enemyData != null ? enemyData.projectileDamage : 6f);
     }
 
     private void ApplyData()
     {
-        normalColor = enemyData != null ? enemyData.color : new Color(0.95f, 0.75f, 0.25f, 1f);
+        normalColor = enemyData != null ? enemyData.color : new Color(0.55f, 0.3f, 1f, 1f);
         spriteRenderer.color = normalColor;
         spriteRenderer.sprite = enemyData != null && enemyData.sprite != null ? enemyData.sprite : GetGeneratedSprite();
     }
 
-    private float GetMoveSpeed() => enemyData != null ? enemyData.moveSpeed : 0.75f;
-    private float GetMaxHealth() => enemyData != null ? enemyData.maxHealth : 25f;
-    private float GetProjectileDamage() => enemyData != null ? enemyData.projectileDamage : 7f;
-    private float GetProjectileSpeed() => enemyData != null ? enemyData.projectileSpeed : 2.5f;
-    private float GetKnockbackForce() => enemyData != null ? enemyData.knockbackForce : 2f;
-
-    private void StartKnockback(Vector2 hitDirection)
-    {
-        if (hitDirection.sqrMagnitude <= 0.01f)
-            return;
-
-        knockbackTimer = knockbackTime;
-        knockbackVelocity = hitDirection.normalized * GetKnockbackForce() * Mathf.Max(1f, hitDirection.magnitude);
-    }
+    private float GetMaxHealth() => enemyData != null ? enemyData.maxHealth : 42f;
 
     private void RefreshColor()
     {
@@ -300,7 +215,6 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
     {
         if (defeatHandled)
             return;
-
         defeatHandled = true;
         rb.linearVelocity = Vector2.zero;
         spriteRenderer.color = hitColor;
@@ -311,7 +225,6 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
     {
         if (dungeonRunManager == null)
             return true;
-
         return !dungeonRunManager.IsWaitingForChoice && dungeonRunManager.IsCurrentNodeCombat;
     }
 
@@ -319,7 +232,6 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
     {
         if (generatedSprite != null)
             return generatedSprite;
-
         Texture2D texture = new Texture2D(48, 48);
         texture.filterMode = FilterMode.Point;
         Color[] pixels = new Color[48 * 48];
@@ -327,9 +239,8 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
             pixels[i] = Color.white;
         texture.SetPixels(pixels);
         texture.Apply();
-
         generatedSprite = Sprite.Create(texture, new Rect(0, 0, 48, 48), new Vector2(0.5f, 0.5f), 100f);
-        generatedSprite.name = "Generated Shooter Enemy Sprite";
+        generatedSprite.name = "Generated Fixed Barrage Enemy Sprite";
         return generatedSprite;
     }
 }

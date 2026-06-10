@@ -23,7 +23,7 @@ public class EnemyProjectile : MonoBehaviour
 
         CircleCollider2D circleCollider = GetComponent<CircleCollider2D>();
         circleCollider.isTrigger = true;
-        circleCollider.radius = 0.12f;
+        circleCollider.radius = 0.065f;
 
         if (spriteRenderer.sprite == null)
             spriteRenderer.sprite = GetGeneratedSprite();
@@ -53,6 +53,9 @@ public class EnemyProjectile : MonoBehaviour
         PlayerHealth playerHealth = other.GetComponent<PlayerHealth>();
         if (playerHealth == null) return;
 
+        if (playerHealth.IsInvincible)
+            return;
+
         playerHealth.TakeDamage(damage, rb.linearVelocity.normalized);
         Destroy(gameObject);
     }
@@ -62,16 +65,16 @@ public class EnemyProjectile : MonoBehaviour
         if (generatedSprite != null)
             return generatedSprite;
 
-        Texture2D texture = new Texture2D(16, 16);
+        Texture2D texture = new Texture2D(12, 12);
         texture.filterMode = FilterMode.Point;
-        Color[] pixels = new Color[16 * 16];
+        Color[] pixels = new Color[12 * 12];
         for (int i = 0; i < pixels.Length; i++)
             pixels[i] = Color.white;
 
         texture.SetPixels(pixels);
         texture.Apply();
 
-        generatedSprite = Sprite.Create(texture, new Rect(0, 0, 16, 16), new Vector2(0.5f, 0.5f), 16f);
+        generatedSprite = Sprite.Create(texture, new Rect(0, 0, 12, 12), new Vector2(0.5f, 0.5f), 100f);
         generatedSprite.name = "Generated Enemy Projectile Sprite";
         return generatedSprite;
     }

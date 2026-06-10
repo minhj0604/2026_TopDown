@@ -479,21 +479,133 @@ public class DungeonRoomController : MonoBehaviour
 
         if (nodeType == DungeonNodeType.Boss)
         {
-            CreateEnemy(parent, "Boss Charger", typeof(ChargerEnemy), new Vector2(0f, 1f), new Vector3(1.4f, 1.4f, 1f));
-            CreateEnemy(parent, "Boss Guard", typeof(ChaserEnemy), new Vector2(-1.2f, 0.5f), Vector3.one);
-            CreateEnemy(parent, "Boss Guard", typeof(ChaserEnemy), new Vector2(1.2f, 0.5f), Vector3.one);
+            CreateEnemy(parent, "Boss Dash Cone", typeof(DashConeEnemy), new Vector2(0f, 1.65f), new Vector3(1.35f, 1.35f, 1f));
+            SpawnRandomEnemySet(parent, GetEliteEnemyPool(), new Vector2[] { new Vector2(-2.4f, 0.45f), new Vector2(2.4f, 0.45f) }, 2, "Boss Support");
             return;
         }
 
         if (nodeType == DungeonNodeType.Elite)
         {
-            CreateEnemy(parent, "Elite Charger", typeof(ChargerEnemy), new Vector2(0f, 0.8f), new Vector3(1.15f, 1.15f, 1f));
-            CreateEnemy(parent, "Chaser", typeof(ChaserEnemy), new Vector2(-1.4f, 0.2f), Vector3.one);
+            SpawnRandomEnemySet(parent, GetEliteEnemyPool(), GetEliteEnemyPositions(), 3, "Elite Enemy");
             return;
         }
 
-        CreateEnemy(parent, "Chaser", typeof(ChaserEnemy), new Vector2(-1.2f, 0.5f), Vector3.one);
-        CreateEnemy(parent, "Chaser", typeof(ChaserEnemy), new Vector2(1.2f, 0.5f), Vector3.one);
+        SpawnRandomEnemySet(parent, GetCommonEnemyPool(), GetCommonEnemyPositions(), 3, "Enemy");
+    }
+
+    private void SpawnRandomEnemySet(Transform parent, System.Type[] enemyPool, Vector2[] positions, int count, string namePrefix)
+    {
+        int spawnCount = Mathf.Min(count, positions.Length);
+        bool[] usedPositions = new bool[positions.Length];
+        bool hasBarrageEnemy = false;
+        for (int i = 0; i < spawnCount; i++)
+        {
+            System.Type enemyType = GetRandomEnemyType(enemyPool, !hasBarrageEnemy);
+            if (IsBarrageEnemyType(enemyType))
+                hasBarrageEnemy = true;
+
+            Vector2 position = GetRandomUnusedPosition(positions, usedPositions);
+            CreateEnemy(parent, $"{namePrefix} {i + 1}", enemyType, position, Vector3.one);
+        }
+    }
+
+    private Vector2 GetRandomUnusedPosition(Vector2[] positions, bool[] usedPositions)
+    {
+        for (int attempt = 0; attempt < 12; attempt++)
+        {
+            int index = UnityEngine.Random.Range(0, positions.Length);
+            if (usedPositions[index])
+                continue;
+
+            usedPositions[index] = true;
+            return positions[index];
+        }
+
+        for (int i = 0; i < positions.Length; i++)
+        {
+            if (usedPositions[i])
+                continue;
+
+            usedPositions[i] = true;
+            return positions[i];
+        }
+
+        return positions[0];
+    }
+
+    private System.Type GetRandomEnemyType(System.Type[] enemyPool, bool allowBarrageEnemy = true)
+    {
+        if (enemyPool == null || enemyPool.Length == 0)
+            return typeof(ChaserEnemy);
+
+        for (int attempt = 0; attempt < 12; attempt++)
+        {
+            System.Type enemyType = enemyPool[UnityEngine.Random.Range(0, enemyPool.Length)];
+            if (allowBarrageEnemy || !IsBarrageEnemyType(enemyType))
+                return enemyType;
+        }
+
+        for (int i = 0; i < enemyPool.Length; i++)
+        {
+            if (!IsBarrageEnemyType(enemyPool[i]))
+                return enemyPool[i];
+        }
+
+        return enemyPool[0];
+    }
+
+    private bool IsBarrageEnemyType(System.Type enemyType)
+    {
+        return enemyType == typeof(ShooterEnemy)
+            || enemyType == typeof(FixedBarrageEnemy)
+            || enemyType == typeof(BombThrowerEnemy);
+    }
+
+    private System.Type[] GetCommonEnemyPool()
+    {
+        return new System.Type[]
+        {
+            typeof(ChaserEnemy),
+            typeof(ShooterEnemy),
+            typeof(BombThrowerEnemy),
+            typeof(LineStrikeEnemy)
+        };
+    }
+
+    private System.Type[] GetEliteEnemyPool()
+    {
+        return new System.Type[]
+        {
+            typeof(ChargerEnemy),
+            typeof(DashConeEnemy),
+            typeof(BombThrowerEnemy),
+            typeof(LineStrikeEnemy),
+            typeof(FixedBarrageEnemy)
+        };
+    }
+
+    private Vector2[] GetCommonEnemyPositions()
+    {
+        return new Vector2[]
+        {
+            new Vector2(-2.4f, 1.35f),
+            new Vector2(2.4f, 1.35f),
+            new Vector2(0f, 2f),
+            new Vector2(-2.1f, -0.1f),
+            new Vector2(2.1f, -0.1f)
+        };
+    }
+
+    private Vector2[] GetEliteEnemyPositions()
+    {
+        return new Vector2[]
+        {
+            new Vector2(0f, 1.75f),
+            new Vector2(-2.5f, 0.45f),
+            new Vector2(2.5f, 0.45f),
+            new Vector2(-1.4f, 2.15f),
+            new Vector2(1.4f, 2.15f)
+        };
     }
 
     private void CreateEnemy(Transform parent, string enemyName, System.Type enemyType, Vector2 position, Vector3 scale)

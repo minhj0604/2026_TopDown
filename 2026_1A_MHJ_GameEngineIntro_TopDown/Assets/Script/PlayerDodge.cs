@@ -8,10 +8,16 @@ public class PlayerDodge : MonoBehaviour
 {
     [SerializeField] private float dodgeDistance = 0.8f;
     [SerializeField] private float dodgeDuration = 0.15f;
+    [SerializeField] private float dodgeInvincibleExtraTime = 0.08f;
     [SerializeField] private float justDodgeValidTime = 1f;
     [SerializeField] private float justDodgeCheckRange = 0.9f;
     [SerializeField] private float successSlowScale = 0.35f;
-    [SerializeField] private float successSlowTime = 0.18f;
+    [SerializeField] private float successSlowTime = 0.7f;
+    [SerializeField] private float normalDodgeSlowScale = 0.62f;
+    [SerializeField] private float normalDodgeSlowTime = 0.7f;
+    [SerializeField] private float normalDodgeToneTime = 0.7f;
+    [SerializeField] private float dodgeProjectileSuccessRange = 0.32f;
+    [SerializeField] private float dodgeEnemySuccessRange = 0.48f;
 
     public bool IsDodging => isDodging;
     public bool HasJustDodge => justDodgeTimer > 0f;
@@ -21,6 +27,7 @@ public class PlayerDodge : MonoBehaviour
     private PlayerController controller;
     private ClockOutputSystem clockOutput;
     private PlayerHealth health;
+    private CombatToneFeedback toneFeedback;
     private Vector2 lastDirection = Vector2.down;
     private bool isDodging;
     private float justDodgeTimer;
@@ -31,6 +38,9 @@ public class PlayerDodge : MonoBehaviour
         controller = GetComponent<PlayerController>();
         clockOutput = GetComponent<ClockOutputSystem>();
         health = GetComponent<PlayerHealth>();
+        toneFeedback = GetComponent<CombatToneFeedback>();
+        if (toneFeedback == null)
+            toneFeedback = gameObject.AddComponent<CombatToneFeedback>();
     }
 
     private void Update()
@@ -67,7 +77,7 @@ public class PlayerDodge : MonoBehaviour
     {
         isDodging = true;
         if (health != null)
-            health.MakeInvincible(dodgeDuration);
+            health.MakeInvincible(dodgeDuration + dodgeInvincibleExtraTime);
 
         bool isJustDodge = IsEnemyAttackNear();
         if (isJustDodge)
@@ -76,7 +86,7 @@ public class PlayerDodge : MonoBehaviour
             if (clockOutput != null)
                 clockOutput.GainFromDodge();
             JustDodged?.Invoke();
-            StartCoroutine(SlowRoutine());
+            StartCoroutine(SlowRoutine(successSlowScale, successSlowTime));
             Debug.Log("Just Dodge.", this);
         }
 
@@ -86,12 +96,20 @@ public class PlayerDodge : MonoBehaviour
         Vector2 start = rb.position;
         Vector2 target = start + lastDirection * dodgeDistance;
         float timer = 0f;
+        bool normalDodgeFeedbackPlayed = false;
 
         while (timer < dodgeDuration)
         {
             timer += Time.deltaTime;
             float t = Mathf.Clamp01(timer / dodgeDuration);
             rb.MovePosition(Vector2.Lerp(start, target, t));
+
+            if (!isJustDodge && !normalDodgeFeedbackPlayed && IsDodgeHazardOverlapping())
+            {
+                PlayNormalDodgeSuccessFeedback();
+                normalDodgeFeedbackPlayed = true;
+            }
+
             yield return null;
         }
 
@@ -101,6 +119,14 @@ public class PlayerDodge : MonoBehaviour
             controller.enabled = true;
 
         isDodging = false;
+    }
+
+    private void PlayNormalDodgeSuccessFeedback()
+    {
+        if (toneFeedback != null)
+            toneFeedback.Play(normalDodgeToneTime);
+        StartCoroutine(SlowRoutine(normalDodgeSlowScale, normalDodgeSlowTime));
+        Debug.Log("Dodge Success.", this);
     }
 
     private bool IsEnemyAttackNear()
@@ -122,6 +148,10 @@ public class PlayerDodge : MonoBehaviour
             if (roomEnemy != null && roomEnemy.IsDead)
                 continue;
 
+            IDodgeableEnemyAttack dodgeableAttack = behaviour as IDodgeableEnemyAttack;
+            if (dodgeableAttack != null && dodgeableAttack.IsDodgeableAttackActiveFor(playerPosition))
+                return true;
+
             float distance = Vector2.Distance(playerPosition, behaviour.transform.position);
             float range = justDodgeCheckRange;
             if (distance <= range)
@@ -131,12 +161,54 @@ public class PlayerDodge : MonoBehaviour
         return false;
     }
 
-    private IEnumerator SlowRoutine()
+    private bool IsDodgeHazardOverlapping()
+    {
+        Vector2 playerPosition = transform.position;
+
+        EnemyProjectile[] projectiles = FindObjectsByType<EnemyProjectile>(FindObjectsSortMode.None);
+        for (int i = 0; i < projectiles.Length; i++)
+        {
+            if (projectiles[i] == null)
+                continue;
+
+            if (Vector2.Distance(playerPosition, projectiles[i].transform.position) <= dodgeProjectileSuccessRange)
+                return true;
+        }
+
+        ExplodingEnemyProjectile[] explodingProjectiles = FindObjectsByType<ExplodingEnemyProjectile>(FindObjectsSortMode.None);
+        for (int i = 0; i < explodingProjectiles.Length; i++)
+        {
+            if (explodingProjectiles[i] == null)
+                continue;
+
+            if (Vector2.Distance(playerPosition, explodingProjectiles[i].transform.position) <= dodgeProjectileSuccessRange)
+                return true;
+        }
+
+        MonoBehaviour[] behaviours = FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None);
+        for (int i = 0; i < behaviours.Length; i++)
+        {
+            MonoBehaviour behaviour = behaviours[i];
+            if (behaviour == null)
+                continue;
+
+            IRoomEnemy roomEnemy = behaviour as IRoomEnemy;
+            if (roomEnemy == null || roomEnemy.IsDead)
+                continue;
+
+            if (Vector2.Distance(playerPosition, behaviour.transform.position) <= dodgeEnemySuccessRange)
+                return true;
+        }
+
+        return false;
+    }
+
+    private IEnumerator SlowRoutine(float slowScale, float slowTime)
     {
         float previousScale = Time.timeScale;
-        Time.timeScale = successSlowScale;
-        yield return new WaitForSecondsRealtime(successSlowTime);
-        if (Mathf.Approximately(Time.timeScale, successSlowScale))
+        Time.timeScale = slowScale;
+        yield return new WaitForSecondsRealtime(slowTime);
+        if (Mathf.Approximately(Time.timeScale, slowScale))
             Time.timeScale = previousScale;
     }
 }
