@@ -92,6 +92,31 @@ public class PlayerCombat : MonoBehaviour
     [SerializeField] private float exoskeletonFinalShakeTime = 0.16f;
     [SerializeField] private float exoskeletonFinalShakePower = 0.075f;
 
+    [Header("Charge Attack")]
+    [SerializeField] private float chargeHoldTime = 0.75f;
+    [SerializeField] private float chargeRecoveryTime = 0.18f;
+    [SerializeField] private float exoskeletonChargeDistance = 2.8f;
+    [SerializeField] private float exoskeletonChargeDuration = 0.18f;
+    [SerializeField] private float exoskeletonChargeRadius = 0.52f;
+    [SerializeField] private float exoskeletonChargeDamageMultiplier = 1.35f;
+    [SerializeField] private float exoskeletonChargeKnockback = 2.4f;
+    [SerializeField] private float exoskeletonChargeGroggyTime = 0.2f;
+    [SerializeField] private float rapierChargeRange = 2.15f;
+    [SerializeField] private float rapierChargeAngle = 118f;
+    [SerializeField] private int rapierChargeHitCount = 5;
+    [SerializeField] private float rapierChargeHitInterval = 0.055f;
+    [SerializeField] private float rapierChargeDamageMultiplier = 0.42f;
+    [SerializeField] private float rapierChargeKnockback = 0.45f;
+    [SerializeField] private float rapierChargeGroggyTime = 0.05f;
+    [SerializeField] private float scytheChargeRange = 4.2f;
+    [SerializeField] private float scytheChargeSpeed = 9.5f;
+    [SerializeField] private float scytheChargeRadius = 0.42f;
+    [SerializeField] private float scytheChargeDamageMultiplier = 1.15f;
+    [SerializeField] private float scytheChargeKnockback = 1.2f;
+    [SerializeField] private float scytheChargeGroggyTime = 0.08f;
+    [SerializeField] private Color chargeAttackFlashColor = new Color(1f, 0.85f, 0.2f, 1f);
+    [SerializeField] private Color chargeReadyColor = new Color(1f, 0.92f, 0.2f, 1f);
+
     public bool IsAttacking => isAttacking;
     public int ComboStep => comboStep;
     public int CurrentWeaponSlot => currentWeaponIndex + 1;
@@ -114,6 +139,7 @@ public class PlayerCombat : MonoBehaviour
     private Coroutine comboDelayRoutine;
     private Coroutine lungeRoutine;
     private Coroutine focusChaseRoutine;
+    private Coroutine chargeAttackRoutine;
     private Vector2 attackDirection = Vector2.down;
     private int currentWeaponIndex = 0;
     private LineRenderer rangePreview;
@@ -127,6 +153,11 @@ public class PlayerCombat : MonoBehaviour
     private int attackSerial = 0;
     private bool focusChaseContactGuard = false;
     private bool focusFinalHitLanded = false;
+    private bool attackHoldActive = false;
+    private bool chargeReadyVisualActive = false;
+    private float attackHoldStartedAt = 0f;
+    private SpriteRenderer playerSprite;
+    private Color playerSpriteOriginalColor = Color.white;
     private WeaponData[] lobbyWeaponPool;
     private MonoBehaviour focusTarget;
 
@@ -141,7 +172,10 @@ public class PlayerCombat : MonoBehaviour
         parry = GetComponent<PlayerParry>();
         health = GetComponent<PlayerHealth>();
         rb = GetComponent<Rigidbody2D>();
+        playerSprite = GetComponent<SpriteRenderer>();
         clockOutput = GetComponent<ClockOutputSystem>();
+        if (playerSprite != null)
+            playerSpriteOriginalColor = playerSprite.color;
 
         if (weaponSlot1 == null)
             weaponSlot1 = currentWeapon;
@@ -158,6 +192,7 @@ public class PlayerCombat : MonoBehaviour
         if (queuedAttackTimer > 0f)
             queuedAttackTimer -= Time.deltaTime;
 
+        UpdateAttackHoldFallback();
         UpdateHitboxFlashTimer();
         UpdateFocusTimer();
         ProcessQueuedAttack();
@@ -173,26 +208,139 @@ public class PlayerCombat : MonoBehaviour
 
     public void OnAttack(InputValue value)
     {
-        if (!value.isPressed) return;
-        QueueAttackInput();
+        if (value.isPressed)
+        {
+            BeginAttackHold();
+            return;
+        }
+
+        CompleteAttackHold();
+    }
+
+    public void OnChargeAttack(InputValue value)
+    {
+        if (value.isPressed)
+        {
+            BeginAttackHold();
+            return;
+        }
+
+        CompleteAttackHold();
     }
 
     public void OnPrevious(InputValue value)
     {
         if (!value.isPressed) return;
-        EquipWeapon(0, true);
+        EquipNextWeapon();
     }
 
     public void OnNext(InputValue value)
     {
         if (!value.isPressed) return;
-        EquipWeapon(1, true);
+        EquipNextWeapon();
     }
 
     public void OnCrouch(InputValue value)
     {
         if (!value.isPressed) return;
-        EquipWeapon(2, true);
+        EquipNextWeapon();
+    }
+
+    public void OnWeaponSwap(InputValue value)
+    {
+        if (!value.isPressed) return;
+        EquipNextWeapon();
+    }
+
+    private void BeginAttackHold()
+    {
+        if (attackHoldActive)
+            return;
+
+        if (!CanHoldAttackInput())
+        {
+            QueueAttackInput();
+            return;
+        }
+
+        attackHoldActive = true;
+        attackHoldStartedAt = Time.time;
+        queuedAttackTimer = 0f;
+        bufferedInput = false;
+    }
+
+    private void CompleteAttackHold()
+    {
+        if (!attackHoldActive)
+            return;
+
+        float heldTime = Time.time - attackHoldStartedAt;
+        attackHoldActive = false;
+        RestoreChargeReadyVisual();
+
+        if (heldTime >= chargeHoldTime && TryStartChargeAttack())
+            return;
+
+        QueueAttackInput();
+    }
+
+    private void UpdateAttackHoldFallback()
+    {
+        if (!attackHoldActive)
+            return;
+
+        if (Time.time - attackHoldStartedAt >= chargeHoldTime)
+            ApplyChargeReadyVisual();
+
+        if (Time.time <= attackHoldStartedAt)
+            return;
+
+        if (!IsAnyAttackControlHeld())
+            CompleteAttackHold();
+    }
+
+    private void ApplyChargeReadyVisual()
+    {
+        if (chargeReadyVisualActive || playerSprite == null)
+            return;
+
+        playerSpriteOriginalColor = playerSprite.color;
+        playerSprite.color = chargeReadyColor;
+        chargeReadyVisualActive = true;
+    }
+
+    private void RestoreChargeReadyVisual()
+    {
+        if (!chargeReadyVisualActive)
+            return;
+
+        if (playerSprite != null)
+            playerSprite.color = playerSpriteOriginalColor;
+
+        chargeReadyVisualActive = false;
+    }
+
+    private bool CanHoldAttackInput()
+    {
+        return currentWeapon != null
+            && !isAttacking
+            && !isInComboRecovery
+            && !isComboDelay
+            && chargeAttackRoutine == null;
+    }
+
+    private bool IsAnyAttackControlHeld()
+    {
+        if (Mouse.current != null && Mouse.current.leftButton.isPressed)
+            return true;
+        if (Keyboard.current != null && (Keyboard.current.enterKey.isPressed || Keyboard.current.numpadEnterKey.isPressed))
+            return true;
+        if (Keyboard.current != null && Keyboard.current.fKey.isPressed)
+            return true;
+        if (Gamepad.current != null && (Gamepad.current.buttonWest.isPressed || Gamepad.current.rightShoulder.isPressed))
+            return true;
+
+        return false;
     }
 
     private void QueueAttackInput()
@@ -283,6 +431,8 @@ public class PlayerCombat : MonoBehaviour
         WeaponData nextWeapon = GetWeaponInSlot(slotIndex);
         if (nextWeapon == null) return;
 
+        attackHoldActive = false;
+        RestoreChargeReadyVisual();
         currentWeapon = nextWeapon;
         currentWeaponIndex = slotIndex;
         animator.speed = 1f;
@@ -292,6 +442,22 @@ public class PlayerCombat : MonoBehaviour
             swapAttackBonusTimer = swapAttackBonusTime;
             ClearFocusTarget(false, true);
             ResetCombo(true);
+        }
+    }
+
+    private void EquipNextWeapon()
+    {
+        if (isAttacking) return;
+
+        int slotCount = 3;
+        for (int i = 1; i <= slotCount; i++)
+        {
+            int nextIndex = (currentWeaponIndex + i) % slotCount;
+            if (GetWeaponInSlot(nextIndex) == null)
+                continue;
+
+            EquipWeapon(nextIndex, true);
+            return;
         }
     }
 
@@ -506,6 +672,236 @@ public class PlayerCombat : MonoBehaviour
         }
     }
 
+    private bool TryStartChargeAttack()
+    {
+        if (currentWeapon == null || isAttacking || isInComboRecovery || isComboDelay || chargeAttackRoutine != null)
+            return false;
+
+        Vector2 direction = GetFacingDirection();
+        ResetCombo(true);
+        ClearFocusTarget(false, true);
+
+        if (currentWeapon.watchSkillType == WatchSkillType.ParryCounter)
+            chargeAttackRoutine = StartCoroutine(ExoskeletonChargeAttackRoutine(direction));
+        else if (IsCurrentWeaponRapier())
+            chargeAttackRoutine = StartCoroutine(RapierChargeAttackRoutine(direction));
+        else if (IsCurrentWeaponScythe())
+            chargeAttackRoutine = StartCoroutine(ScytheChargeAttackRoutine(direction));
+        else
+            return false;
+
+        return true;
+    }
+
+    private IEnumerator ExoskeletonChargeAttackRoutine(Vector2 direction)
+    {
+        BeginChargeAttackState(direction);
+        if (health != null)
+            health.MakeInvincible(exoskeletonChargeDuration + 0.08f);
+
+        damagedTargets.Clear();
+        float distance = exoskeletonChargeDistance;
+        float timer = 0f;
+
+        while (timer < exoskeletonChargeDuration)
+        {
+            float stepTime = Time.fixedDeltaTime;
+            timer += stepTime;
+
+            if (rb != null && distance > 0f)
+                rb.position += direction * (distance * stepTime / exoskeletonChargeDuration);
+
+            Vector2 center = rb != null ? rb.position : (Vector2)transform.position;
+            DamageTargetsInCircle(center, exoskeletonChargeRadius, GetBaseWeaponAttackPower() * exoskeletonChargeDamageMultiplier, direction * exoskeletonChargeKnockback, exoskeletonChargeGroggyTime, false);
+            ShowCircleChargeFlash(center, exoskeletonChargeRadius);
+            yield return new WaitForFixedUpdate();
+        }
+
+        FinishChargeAttack(damagedTargets.Count, exoskeletonFinalShakeTime, exoskeletonFinalShakePower);
+    }
+
+    private IEnumerator RapierChargeAttackRoutine(Vector2 direction)
+    {
+        BeginChargeAttackState(direction);
+        int totalHits = 0;
+        int slashCount = Mathf.Max(1, rapierChargeHitCount);
+
+        for (int i = 0; i < slashCount; i++)
+        {
+            float tilt = i % 2 == 0 ? -rapierSlashTilt : rapierSlashTilt;
+            Vector2 slashDirection = RotateVector(direction, tilt);
+            totalHits += DamageTargetsInCone(
+                GetAttackShapeOrigin(),
+                slashDirection,
+                rapierChargeRange,
+                rapierChargeAngle,
+                GetBaseWeaponAttackPower() * rapierChargeDamageMultiplier,
+                direction * rapierChargeKnockback,
+                rapierChargeGroggyTime,
+                true);
+
+            ShowConeChargeFlash(GetAttackShapeOrigin(), slashDirection, rapierChargeRange, rapierChargeAngle);
+            ShakeCamera(0.035f, 0.018f);
+            yield return new WaitForSeconds(rapierChargeHitInterval);
+        }
+
+        FinishChargeAttack(totalHits, rapierFinalShakeTime, rapierFinalShakePower);
+    }
+
+    private IEnumerator ScytheChargeAttackRoutine(Vector2 direction)
+    {
+        BeginChargeAttackState(direction);
+        damagedTargets.Clear();
+
+        GameObject slashObject = new GameObject("ScytheChargeSlash");
+        LineRenderer slashRenderer = slashObject.AddComponent<LineRenderer>();
+        SetupCircleRenderer(slashRenderer, chargeAttackFlashColor, hitboxFlashWidth, 40);
+        slashRenderer.loop = false;
+        slashRenderer.positionCount = 2;
+
+        Vector2 start = GetAttackShapeOrigin() + direction * 0.35f;
+        float traveled = 0f;
+        float damage = GetBaseWeaponAttackPower() * scytheChargeDamageMultiplier;
+
+        while (traveled < scytheChargeRange)
+        {
+            float moveDistance = scytheChargeSpeed * Time.fixedDeltaTime;
+            traveled += moveDistance;
+            Vector2 center = start + direction * traveled;
+            Vector2 side = new Vector2(-direction.y, direction.x);
+
+            slashRenderer.SetPosition(0, center - side * scytheChargeRadius);
+            slashRenderer.SetPosition(1, center + side * scytheChargeRadius);
+
+            DamageTargetsInCircle(center, scytheChargeRadius, damage, direction * scytheChargeKnockback, scytheChargeGroggyTime, false);
+            yield return new WaitForFixedUpdate();
+        }
+
+        Destroy(slashObject);
+        FinishChargeAttack(damagedTargets.Count, scytheFinalShakeTime, scytheFinalShakePower);
+    }
+
+    private void BeginChargeAttackState(Vector2 direction)
+    {
+        attackDirection = direction.sqrMagnitude > 0.01f ? direction.normalized : Vector2.down;
+        isAttacking = true;
+        isInComboRecovery = false;
+        isComboDelay = false;
+        bufferedInput = false;
+        hasExecutedHitThisAttack = true;
+        queuedAttackTimer = 0f;
+        attackSerial++;
+
+        if (controller != null)
+            controller.RefreshAfterAttack();
+    }
+
+    private void FinishChargeAttack(int hitCount, float shakeTime, float shakePower)
+    {
+        if (clockOutput != null && hitCount > 0)
+            clockOutput.GainFromAttackHit(hitCount, false);
+
+        if (hitCount > 0)
+            ShakeCamera(shakeTime, shakePower);
+
+        chargeAttackRoutine = StartCoroutine(ChargeRecoveryRoutine());
+    }
+
+    private IEnumerator ChargeRecoveryRoutine()
+    {
+        yield return new WaitForSeconds(chargeRecoveryTime);
+        chargeAttackRoutine = null;
+        ResetCombo(true);
+    }
+
+    private int DamageTargetsInCircle(Vector2 center, float radius, float damage, Vector2 knockback, float groggyTime, bool allowRepeatHits)
+    {
+        int hitCount = Physics2D.OverlapCircleNonAlloc(center, radius, hitBuffer, hitLayers);
+        int damageCount = 0;
+
+        for (int i = 0; i < hitCount; i++)
+        {
+            Collider2D hitCollider = hitBuffer[i];
+            if (hitCollider == null || hitCollider.transform == transform) continue;
+
+            damageCount += DamageCollider(hitCollider, center, damage, knockback, groggyTime, allowRepeatHits);
+        }
+
+        return damageCount;
+    }
+
+    private int DamageTargetsInCone(Vector2 origin, Vector2 direction, float range, float angle, float damage, Vector2 knockback, float groggyTime, bool allowRepeatHits)
+    {
+        Vector2 center = origin + direction.normalized * (range * 0.5f);
+        int hitCount = Physics2D.OverlapCircleNonAlloc(center, range, hitBuffer, hitLayers);
+        int damageCount = 0;
+
+        for (int i = 0; i < hitCount; i++)
+        {
+            Collider2D hitCollider = hitBuffer[i];
+            if (hitCollider == null || hitCollider.transform == transform) continue;
+
+            Vector2 point = hitCollider.ClosestPoint(origin);
+            Vector2 toPoint = point - origin;
+            if (toPoint.sqrMagnitude > range * range)
+                continue;
+            if (toPoint.sqrMagnitude > 0.001f && Vector2.Angle(direction, toPoint) > angle * 0.5f)
+                continue;
+
+            damageCount += DamageCollider(hitCollider, origin, damage, knockback, groggyTime, allowRepeatHits);
+        }
+
+        return damageCount;
+    }
+
+    private int DamageCollider(Collider2D hitCollider, Vector2 hitOrigin, float damage, Vector2 knockback, float groggyTime, bool allowRepeatHits)
+    {
+        MonoBehaviour[] behaviours = hitCollider.GetComponentsInParent<MonoBehaviour>();
+
+        for (int i = 0; i < behaviours.Length; i++)
+        {
+            MonoBehaviour behaviour = behaviours[i];
+            IDamageable damageable = behaviour as IDamageable;
+            if (damageable == null) continue;
+            if (!allowRepeatHits && damagedTargets.Contains(behaviour)) continue;
+
+            Vector2 hitPoint = hitCollider.ClosestPoint(hitOrigin);
+            damageable.TakeDamage(damage, hitPoint, knockback);
+            ApplyGroggy(behaviour, groggyTime);
+            if (!damagedTargets.Contains(behaviour))
+                damagedTargets.Add(behaviour);
+            return 1;
+        }
+
+        return 0;
+    }
+
+    private void ApplyGroggy(MonoBehaviour hitBehaviour, float groggyTime)
+    {
+        IEnemyStatusReceiver statusReceiver = hitBehaviour as IEnemyStatusReceiver;
+        if (statusReceiver == null || groggyTime <= 0f) return;
+
+        statusReceiver.ApplyGroggy(groggyTime);
+    }
+
+    private void ShowCircleChargeFlash(Vector2 center, float radius)
+    {
+        if (!showHitboxFlash || hitboxFlash == null) return;
+
+        DrawCircle(hitboxFlash, center, radius, chargeAttackFlashColor, hitboxFlashWidth);
+        hitboxFlash.enabled = true;
+        hitboxFlashTimer = hitboxFlashTime;
+    }
+
+    private void ShowConeChargeFlash(Vector2 origin, Vector2 direction, float range, float angle)
+    {
+        if (!showHitboxFlash || hitboxFlash == null) return;
+
+        DrawChargeCone(hitboxFlash, origin, direction, range, angle, chargeAttackFlashColor, hitboxFlashWidth);
+        hitboxFlash.enabled = true;
+        hitboxFlashTimer = hitboxFlashTime;
+    }
+
     private bool TryParryEnemyAttackInArea(Vector2 hitCenter, float attackRadius)
     {
         if (parry == null)
@@ -628,6 +1024,8 @@ public class PlayerCombat : MonoBehaviour
     private void ResetCombo(bool clearQueuedAttack)
     {
         comboStep = 0;
+        attackHoldActive = false;
+        RestoreChargeReadyVisual();
         isAttacking = false;
         isInComboRecovery = false;
         isComboDelay = false;
@@ -689,6 +1087,15 @@ public class PlayerCombat : MonoBehaviour
         float attackPower = currentWeapon != null ? currentWeapon.attackPower : 0f;
         if (currentWeapon != null)
             attackPower *= currentWeapon.GetComboDamageMultiplier(comboStep);
+        if (permanentProgress != null)
+            attackPower *= permanentProgress.AttackDamageMultiplier;
+
+        return attackPower;
+    }
+
+    private float GetBaseWeaponAttackPower()
+    {
+        float attackPower = currentWeapon != null ? currentWeapon.attackPower : 0f;
         if (permanentProgress != null)
             attackPower *= permanentProgress.AttackDamageMultiplier;
 
@@ -1172,7 +1579,7 @@ public class PlayerCombat : MonoBehaviour
     {
         if (rangePreview == null) return;
 
-        bool shouldShow = showRangePreview && currentWeapon != null && isAttacking;
+        bool shouldShow = showRangePreview && currentWeapon != null && isAttacking && chargeAttackRoutine == null;
         rangePreview.enabled = shouldShow;
         if (!shouldShow) return;
 
@@ -1315,6 +1722,28 @@ public class PlayerCombat : MonoBehaviour
             float currentAngle = -halfAngle + angle * t + tilt;
             Vector2 direction = RotateVector(GetFacingDirection(), currentAngle);
             renderer.SetPosition(i + 1, origin + direction * range);
+        }
+    }
+
+    private void DrawChargeCone(LineRenderer renderer, Vector2 origin, Vector2 direction, float range, float angle, Color color, float width)
+    {
+        int segmentCount = Mathf.Max(10, rangePreviewSegments / 2);
+        renderer.loop = false;
+        renderer.positionCount = segmentCount + 2;
+        renderer.startWidth = width;
+        renderer.endWidth = width;
+        renderer.startColor = color;
+        renderer.endColor = color;
+
+        renderer.SetPosition(0, origin);
+        float halfAngle = angle * 0.5f;
+
+        for (int i = 0; i <= segmentCount; i++)
+        {
+            float t = (float)i / segmentCount;
+            float currentAngle = -halfAngle + angle * t;
+            Vector2 pointDirection = RotateVector(direction, currentAngle);
+            renderer.SetPosition(i + 1, origin + pointDirection * range);
         }
     }
 

@@ -18,6 +18,8 @@ public class ChargerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
     [SerializeField] private float parriedGroggyTime = 1.1f;
     [SerializeField] private float parriedKnockbackMultiplier = 3.5f;
     [SerializeField] private float contactDamageCenterDistance = 0.38f;
+    [SerializeField] private float separationRange = 0.8f;
+    [SerializeField] private float separationWeight = 0.75f;
 
     public bool IsDead => currentHealth <= 0f && !isTimeStopped;
     public bool IsParryableAttackActive => isCharging && !IsDead && !isTimeStopped && groggyTimer <= 0f;
@@ -121,6 +123,7 @@ public class ChargerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
         if (distance > startRange)
         {
             Vector2 direction = ((Vector2)player.position - rb.position).normalized;
+            direction = EnemySeparationUtility.AddSeparation(this, direction, separationRange, separationWeight);
             float moveSpeed = enemyData != null ? enemyData.moveSpeed : 0.35f;
             rb.MovePosition(rb.position + direction * moveSpeed * Time.fixedDeltaTime);
         }

@@ -23,6 +23,8 @@ public class LineStrikeEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemySta
     [SerializeField] private float hitFlashTime = 0.08f;
     [SerializeField] private float knockbackTime = 0.12f;
     [SerializeField] private float hitStunTime = 0.3f;
+    [SerializeField] private float separationRange = 0.8f;
+    [SerializeField] private float separationWeight = 0.8f;
 
     public bool IsDead => currentHealth <= 0f && !isTimeStopped;
     public bool IsParryableAttackActive => isAttackActive && !IsDead && !isTimeStopped && groggyTimer <= 0f;
@@ -101,6 +103,7 @@ public class LineStrikeEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemySta
         if (distance <= detectRange && distance > stopDistance)
         {
             Vector2 direction = ((Vector2)player.position - rb.position).normalized;
+            direction = EnemySeparationUtility.AddSeparation(this, direction, separationRange, separationWeight);
             rb.MovePosition(rb.position + direction * GetMoveSpeed() * Time.fixedDeltaTime);
         }
         else

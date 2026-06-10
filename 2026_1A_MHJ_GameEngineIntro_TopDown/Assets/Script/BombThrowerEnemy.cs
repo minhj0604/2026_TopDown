@@ -20,6 +20,11 @@ public class BombThrowerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemySt
     [SerializeField] private float hitFlashTime = 0.08f;
     [SerializeField] private float knockbackTime = 0.12f;
     [SerializeField] private float hitStunTime = 0.3f;
+    [SerializeField] private float hitGroggyTime = 0.8f;
+    [SerializeField] private float retreatAfterGroggyTime = 0.7f;
+    [SerializeField] private float postRetreatThrowDelay = 0.3f;
+    [SerializeField] private float separationRange = 0.8f;
+    [SerializeField] private float separationWeight = 0.9f;
 
     public bool IsDead => currentHealth <= 0f && !isTimeStopped;
 
@@ -35,12 +40,14 @@ public class BombThrowerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemySt
     private float throwTimer;
     private float hitFlashTimer;
     private float groggyTimer;
+    private float retreatTimer;
     private float knockbackTimer;
     private float hitStunTimer;
     private Vector2 knockbackVelocity;
     private bool isTimeStopped;
     private bool pendingTimeStopHit;
     private bool defeatHandled;
+    private bool retreatAfterGroggy;
     private Vector2 pendingTimeStopKnockback;
     private Color normalColor;
 
@@ -73,7 +80,7 @@ public class BombThrowerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemySt
     private void Update()
     {
         TickTimers();
-        if (hitStunTimer <= 0f && CanStartThrow())
+        if (hitStunTimer <= 0f && retreatTimer <= 0f && CanStartThrow())
             throwRoutine = StartCoroutine(ThrowRoutine());
     }
 
@@ -90,6 +97,11 @@ public class BombThrowerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemySt
         }
 
         if (hitStunTimer > 0f || groggyTimer > 0f) return;
+        if (retreatTimer > 0f)
+        {
+            MoveAwayFromPlayer(GetRetreatDistance());
+            return;
+        }
 
         Vector2 toPlayer = (Vector2)player.position - rb.position;
         float distance = toPlayer.magnitude;
@@ -97,6 +109,9 @@ public class BombThrowerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemySt
         Vector2 moveDirection = Vector2.zero;
         if (distance < Mathf.Min(preferredDistance - 0.25f, panicBackstepDistance))
             moveDirection = -toPlayer.normalized;
+
+        if (moveDirection.sqrMagnitude > 0.01f)
+            moveDirection = EnemySeparationUtility.AddSeparation(this, moveDirection, separationRange, separationWeight);
 
         rb.MovePosition(rb.position + moveDirection * GetMoveSpeed() * Time.fixedDeltaTime);
     }
@@ -120,9 +135,7 @@ public class BombThrowerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemySt
             return;
         }
 
-        StartKnockback(hitDirection);
-        hitStunTimer = hitStunTime;
-        StopThrowRoutine();
+        StartHitReaction(hitDirection);
         spriteRenderer.color = hitColor;
         hitFlashTimer = hitFlashTime;
 
@@ -138,12 +151,14 @@ public class BombThrowerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemySt
         throwTimer = throwInterval;
         hitFlashTimer = 0f;
         groggyTimer = 0f;
+        retreatTimer = 0f;
         knockbackTimer = 0f;
         hitStunTimer = 0f;
         knockbackVelocity = Vector2.zero;
         isTimeStopped = false;
         pendingTimeStopHit = false;
         defeatHandled = false;
+        retreatAfterGroggy = false;
         pendingTimeStopKnockback = Vector2.zero;
         StopThrowRoutine();
         rb.linearVelocity = Vector2.zero;
@@ -161,8 +176,7 @@ public class BombThrowerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemySt
         {
             if (pendingTimeStopHit)
             {
-                StartKnockback(pendingTimeStopKnockback);
-                hitStunTimer = hitStunTime;
+                StartHitReaction(pendingTimeStopKnockback);
                 pendingTimeStopHit = false;
                 pendingTimeStopKnockback = Vector2.zero;
             }
@@ -182,6 +196,8 @@ public class BombThrowerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemySt
         if (IsDead) return;
 
         groggyTimer = duration;
+        retreatAfterGroggy = false;
+        retreatTimer = 0f;
         StopThrowRoutine();
         rb.linearVelocity = Vector2.zero;
         RefreshColor();
@@ -221,10 +237,11 @@ public class BombThrowerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemySt
 
     private bool CanStartThrow()
     {
-        if (!CanAct() || IsDead || player == null || isTimeStopped || groggyTimer > 0f || throwTimer > 0f || throwRoutine != null)
+        if (!CanAct() || IsDead || player == null || isTimeStopped || groggyTimer > 0f || retreatTimer > 0f || throwTimer > 0f || throwRoutine != null)
             return false;
 
-        return Vector2.Distance(rb.position, player.position) <= (enemyData != null ? enemyData.shootRange : 3.2f);
+        float throwRange = enemyData != null ? enemyData.shootRange : 3.2f;
+        return ((Vector2)player.position - rb.position).sqrMagnitude <= throwRange * throwRange;
     }
 
     private void TickTimers()
@@ -241,8 +258,14 @@ public class BombThrowerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemySt
         {
             groggyTimer -= Time.deltaTime;
             if (groggyTimer <= 0f && !IsDead)
+            {
+                if (retreatAfterGroggy)
+                    StartRetreatAfterGroggy();
                 RefreshColor();
+            }
         }
+        if (retreatTimer > 0f)
+            retreatTimer -= Time.deltaTime;
         if (knockbackTimer > 0f)
             knockbackTimer -= Time.deltaTime;
         if (hitStunTimer > 0f)
@@ -266,6 +289,46 @@ public class BombThrowerEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemySt
     private float GetMaxHealth() => enemyData != null ? enemyData.maxHealth : 36f;
     private float GetMoveSpeed() => enemyData != null ? enemyData.moveSpeed * 0.55f : 0.45f;
     private float GetKnockbackForce() => enemyData != null ? enemyData.knockbackForce : 2f;
+
+    private float GetRetreatDistance()
+    {
+        float preferredDistance = enemyData != null ? enemyData.preferredDistance : 2.4f;
+        return Mathf.Max(preferredDistance, panicBackstepDistance);
+    }
+
+    private void StartHitReaction(Vector2 hitDirection)
+    {
+        StartKnockback(hitDirection);
+        hitStunTimer = hitStunTime;
+        groggyTimer = Mathf.Max(groggyTimer, hitGroggyTime);
+        retreatAfterGroggy = true;
+        retreatTimer = 0f;
+        StopThrowRoutine();
+    }
+
+    private void StartRetreatAfterGroggy()
+    {
+        retreatAfterGroggy = false;
+        retreatTimer = retreatAfterGroggyTime;
+        throwTimer = Mathf.Max(throwTimer, retreatAfterGroggyTime + postRetreatThrowDelay);
+    }
+
+    private void MoveAwayFromPlayer(float targetDistance)
+    {
+        if (player == null)
+            return;
+
+        Vector2 toPlayer = (Vector2)player.position - rb.position;
+        if (toPlayer.sqrMagnitude <= 0.01f)
+            toPlayer = Vector2.down;
+
+        float currentDistance = toPlayer.magnitude;
+        if (currentDistance >= targetDistance)
+            return;
+
+        Vector2 moveDirection = EnemySeparationUtility.AddSeparation(this, -toPlayer.normalized, separationRange, separationWeight);
+        rb.MovePosition(rb.position + moveDirection * GetMoveSpeed() * Time.fixedDeltaTime);
+    }
 
     private void StartKnockback(Vector2 hitDirection)
     {

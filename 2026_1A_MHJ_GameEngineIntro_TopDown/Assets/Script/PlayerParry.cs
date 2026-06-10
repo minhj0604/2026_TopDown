@@ -1,4 +1,3 @@
-using System.Collections;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -63,7 +62,7 @@ public class PlayerParry : MonoBehaviour
         ShakeCameraOnSuccess();
         if (toneFeedback != null)
             toneFeedback.Play(successToneTime);
-        StartCoroutine(SlowRoutine());
+        GameTimeScaleController.RequestSlowMotion(successSlowScale, successSlowTime);
         Debug.Log("Attack Parry Success.", this);
         return true;
     }
@@ -89,12 +88,4 @@ public class PlayerParry : MonoBehaviour
         shake.Shake(successShakeTime, successShakePower);
     }
 
-    private IEnumerator SlowRoutine()
-    {
-        float previousScale = Time.timeScale;
-        Time.timeScale = successSlowScale;
-        yield return new WaitForSecondsRealtime(successSlowTime);
-        if (Mathf.Approximately(Time.timeScale, successSlowScale))
-            Time.timeScale = previousScale;
-    }
 }

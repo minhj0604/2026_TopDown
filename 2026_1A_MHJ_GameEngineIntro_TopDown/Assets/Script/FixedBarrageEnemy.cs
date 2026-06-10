@@ -17,6 +17,7 @@ public class FixedBarrageEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyS
     [SerializeField] private float patternRotateDegrees = 18f;
     [SerializeField] private float fireFlashTime = 0.08f;
     [SerializeField] private float hitFlashTime = 0.08f;
+    [SerializeField] private float hitGroggyTime = 0.8f;
 
     public bool IsDead => currentHealth <= 0f && !isTimeStopped;
 
@@ -99,6 +100,7 @@ public class FixedBarrageEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyS
 
         spriteRenderer.color = hitColor;
         hitFlashTimer = hitFlashTime;
+        ApplyHitGroggy();
         if (IsDead)
             HandleDefeat();
     }
@@ -131,6 +133,7 @@ public class FixedBarrageEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyS
         {
             if (pendingTimeStopHit)
             {
+                ApplyHitGroggy();
                 pendingTimeStopHit = false;
                 pendingTimeStopKnockback = Vector2.zero;
             }
@@ -156,6 +159,16 @@ public class FixedBarrageEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyS
     private bool CanFire()
     {
         return CanAct() && !IsDead && !isTimeStopped && groggyTimer <= 0f && patternTimer <= 0f;
+    }
+
+    private void ApplyHitGroggy()
+    {
+        if (currentHealth <= 0f)
+            return;
+
+        groggyTimer = Mathf.Max(groggyTimer, hitGroggyTime);
+        patternTimer = Mathf.Max(patternTimer, hitGroggyTime);
+        rb.linearVelocity = Vector2.zero;
     }
 
     private void FirePattern()

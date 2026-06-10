@@ -30,12 +30,9 @@ public class DungeonRoomController : MonoBehaviour
     private ModuleRewardManager moduleRewardManager;
     private PlayerModuleInventory playerModuleInventory;
     private PlayerWallet playerWallet;
-    private float defaultFixedDeltaTime;
 
     private void Awake()
     {
-        defaultFixedDeltaTime = Time.fixedDeltaTime;
-
         if (dungeonRunManager == null)
             dungeonRunManager = FindFirstObjectByType<DungeonRunManager>();
         if (fallbackExitDoor == null)
@@ -219,13 +216,8 @@ public class DungeonRoomController : MonoBehaviour
         float clearSlowScale = Mathf.Clamp(combatClearSlowScale, 0.08f, 0.35f);
         PlayCombatClearCameraEffect(clearSlowTime);
 
-        Time.timeScale = clearSlowScale;
-        Time.fixedDeltaTime = defaultFixedDeltaTime * clearSlowScale;
-
+        GameTimeScaleController.RequestSlowMotion(clearSlowScale, clearSlowTime);
         yield return new WaitForSecondsRealtime(clearSlowTime);
-
-        Time.timeScale = 1f;
-        Time.fixedDeltaTime = defaultFixedDeltaTime;
 
         moduleRewardManager.OfferReward(
             playerModuleInventory,

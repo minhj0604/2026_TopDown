@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 
 [RequireComponent(typeof(SpriteRenderer))]
 [RequireComponent(typeof(BoxCollider2D))]
@@ -18,7 +19,8 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
     [SerializeField] private float detectRange = 2.2f;
     [SerializeField] private float loseRange = 3.2f;
     [SerializeField] private float separationRange = 0.85f;
-    [SerializeField] private float separationPower = 1.35f;
+    [FormerlySerializedAs("separationPower")]
+    [SerializeField] private float separationWeight = 1.35f;
 
     [Header("Wander")]
     [SerializeField] private float wanderRadius = 1.4f;
@@ -312,37 +314,9 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
 
         direction.Normalize();
         if (useSeparation)
-        {
-            Vector2 separation = GetSeparationDirection();
-            direction = (direction + separation * separationPower).normalized;
-        }
+            direction = EnemySeparationUtility.AddSeparation(this, direction, separationRange, separationWeight);
 
         rb.MovePosition(rb.position + direction * moveSpeed * Time.fixedDeltaTime);
-    }
-
-    private Vector2 GetSeparationDirection()
-    {
-        Vector2 separation = Vector2.zero;
-        ChaserEnemy[] chasers = FindObjectsByType<ChaserEnemy>(FindObjectsSortMode.None);
-
-        foreach (ChaserEnemy other in chasers)
-        {
-            if (other == null || other == this || other.IsDead) continue;
-
-            Vector2 away = rb.position - other.rb.position;
-            float distance = away.magnitude;
-            if (distance > separationRange) continue;
-            if (distance <= 0.001f)
-            {
-                float angle = (GetInstanceID() % 360) * Mathf.Deg2Rad;
-                away = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
-                distance = 0.001f;
-            }
-
-            separation += away.normalized * (1f - distance / separationRange);
-        }
-
-        return separation;
     }
 
     private void ClampChaseSettings()
@@ -350,7 +324,7 @@ public class ChaserEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatusR
         detectRange = Mathf.Clamp(detectRange, 0.8f, 2.2f);
         loseRange = Mathf.Clamp(loseRange, detectRange + 0.4f, 3.2f);
         separationRange = Mathf.Clamp(separationRange, 0.5f, 1.0f);
-        separationPower = Mathf.Clamp(separationPower, 0.8f, 1.8f);
+        separationWeight = Mathf.Clamp(separationWeight, 0.8f, 1.8f);
     }
 
     private void RefreshColor()

@@ -19,8 +19,9 @@ public class PlayerWatchSkill : MonoBehaviour
     [SerializeField] private float counterSmashInvincibleTime = 0.45f;
     [SerializeField] private float counterSmashCameraLeadDistance = 0.24f;
     [SerializeField] private float counterSmashCameraLeadTime = 0.18f;
-    [SerializeField] private float counterSmashShakeTime = 0.2f;
-    [SerializeField] private float counterSmashShakePower = 0.11f;
+    [SerializeField] private float counterSmashShakeTime = 0.24f;
+    [SerializeField] private float counterSmashShakePower = 0.18f;
+    [SerializeField] private float counterSmashInvertTime = 0.16f;
 
     [Header("Rapier Time Stop")]
     [SerializeField] private float timeStopDuration = 2f;
@@ -57,10 +58,12 @@ public class PlayerWatchSkill : MonoBehaviour
     private PlayerParry parry;
     private ClockOutputSystem clockOutput;
     private PlayerHealth health;
+    private CombatToneFeedback toneFeedback;
     private Rigidbody2D rb;
     private bool isUsingSkill;
     private bool timeStopReady;
     private Coroutine timeStopReadyRoutine;
+    private Coroutine counterSmashInvertRoutine;
     private MonoBehaviour lastBlinkTarget;
     private bool scytheChainActive;
     private bool scytheChainJumping;
@@ -68,10 +71,15 @@ public class PlayerWatchSkill : MonoBehaviour
     private Coroutine scytheChainReturnRoutine;
     private Vector2 scytheChainStartPosition;
     private MonoBehaviour scytheChainFirstTarget;
+    private int timeStopReadySlowHandle = GameTimeScaleController.InvalidHandle;
     private SpriteRenderer[] tintedRenderers = new SpriteRenderer[0];
     private Color[] originalTintColors = new Color[0];
     private Tilemap[] tintedTilemaps = new Tilemap[0];
     private Color[] originalTilemapColors = new Color[0];
+    private SpriteRenderer[] counterTintedRenderers = new SpriteRenderer[0];
+    private Color[] counterOriginalRendererColors = new Color[0];
+    private Tilemap[] counterTintedTilemaps = new Tilemap[0];
+    private Color[] counterOriginalTilemapColors = new Color[0];
 
     private void Awake()
     {
@@ -80,6 +88,7 @@ public class PlayerWatchSkill : MonoBehaviour
         parry = GetComponent<PlayerParry>();
         clockOutput = GetComponent<ClockOutputSystem>();
         health = GetComponent<PlayerHealth>();
+        toneFeedback = GetComponent<CombatToneFeedback>();
         rb = GetComponent<Rigidbody2D>();
 
         if (dodge != null)
@@ -90,6 +99,9 @@ public class PlayerWatchSkill : MonoBehaviour
     {
         if (dodge != null)
             dodge.JustDodged -= OnJustDodged;
+
+        if (counterSmashInvertRoutine != null)
+            RestoreCounterSmashInvert();
     }
 
     private void Update()
@@ -188,6 +200,7 @@ public class PlayerWatchSkill : MonoBehaviour
         yield return new WaitForSeconds(counterDelay);
 
         ApplyCounterSmash(target);
+        PlayCounterSmashImpactVisual();
         ShakeCounterCamera();
 
         Debug.Log("Counter smash.", this);
@@ -275,6 +288,99 @@ public class PlayerWatchSkill : MonoBehaviour
         ShakeCamera(counterSmashShakeTime, counterSmashShakePower);
     }
 
+    private void PlayCounterSmashImpactVisual()
+    {
+        if (counterSmashInvertRoutine != null)
+        {
+            StopCoroutine(counterSmashInvertRoutine);
+            RestoreCounterSmashInvert();
+        }
+
+        if (toneFeedback == null)
+            toneFeedback = GetComponent<CombatToneFeedback>();
+        if (toneFeedback != null)
+            toneFeedback.StopAndRestore();
+
+        counterSmashInvertRoutine = StartCoroutine(CounterSmashInvertRoutine());
+    }
+
+    private IEnumerator CounterSmashInvertRoutine()
+    {
+        ApplyCounterSmashInvert();
+
+        yield return new WaitForSecondsRealtime(counterSmashInvertTime);
+
+        RestoreCounterSmashInvert();
+        counterSmashInvertRoutine = null;
+    }
+
+    private void ApplyCounterSmashInvert()
+    {
+        SpriteRenderer playerRenderer = GetComponent<SpriteRenderer>();
+        SpriteRenderer[] renderers = FindObjectsByType<SpriteRenderer>(FindObjectsSortMode.None);
+        counterTintedRenderers = new SpriteRenderer[renderers.Length];
+        counterOriginalRendererColors = new Color[renderers.Length];
+        int count = 0;
+
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            SpriteRenderer renderer = renderers[i];
+            if (renderer == null || renderer == playerRenderer)
+                continue;
+            if (renderer.transform.IsChildOf(transform))
+                continue;
+
+            counterTintedRenderers[count] = renderer;
+            counterOriginalRendererColors[count] = renderer.color;
+            renderer.color = InvertColor(renderer.color);
+            count++;
+        }
+
+        System.Array.Resize(ref counterTintedRenderers, count);
+        System.Array.Resize(ref counterOriginalRendererColors, count);
+
+        Tilemap[] tilemaps = FindObjectsByType<Tilemap>(FindObjectsSortMode.None);
+        counterTintedTilemaps = new Tilemap[tilemaps.Length];
+        counterOriginalTilemapColors = new Color[tilemaps.Length];
+        int tilemapCount = 0;
+
+        for (int i = 0; i < tilemaps.Length; i++)
+        {
+            Tilemap tilemap = tilemaps[i];
+            if (tilemap == null)
+                continue;
+
+            counterTintedTilemaps[tilemapCount] = tilemap;
+            counterOriginalTilemapColors[tilemapCount] = tilemap.color;
+            tilemap.color = InvertColor(tilemap.color);
+            tilemapCount++;
+        }
+
+        System.Array.Resize(ref counterTintedTilemaps, tilemapCount);
+        System.Array.Resize(ref counterOriginalTilemapColors, tilemapCount);
+    }
+
+    private void RestoreCounterSmashInvert()
+    {
+        for (int i = 0; i < counterTintedRenderers.Length; i++)
+        {
+            if (counterTintedRenderers[i] != null)
+                counterTintedRenderers[i].color = counterOriginalRendererColors[i];
+        }
+
+        counterTintedRenderers = new SpriteRenderer[0];
+        counterOriginalRendererColors = new Color[0];
+
+        for (int i = 0; i < counterTintedTilemaps.Length; i++)
+        {
+            if (counterTintedTilemaps[i] != null)
+                counterTintedTilemaps[i].color = counterOriginalTilemapColors[i];
+        }
+
+        counterTintedTilemaps = new Tilemap[0];
+        counterOriginalTilemapColors = new Color[0];
+    }
+
     private void TryTimeStop()
     {
         if (!HasEnoughSkillCost())
@@ -310,12 +416,12 @@ public class PlayerWatchSkill : MonoBehaviour
         ApplyTimeStopReadyTint();
         SetTimeStopReadyCameraZoom();
 
-        Time.timeScale = timeStopReadySlowScale;
+        timeStopReadySlowHandle = GameTimeScaleController.RequestSlowMotion(timeStopReadySlowScale, timeStopReadyWindow);
 
         yield return new WaitForSecondsRealtime(timeStopReadyWindow);
 
-        if (Mathf.Approximately(Time.timeScale, timeStopReadySlowScale))
-            Time.timeScale = 1f;
+        GameTimeScaleController.CancelSlowMotion(timeStopReadySlowHandle);
+        timeStopReadySlowHandle = GameTimeScaleController.InvalidHandle;
 
         ClearTimeStopReadyCameraZoom(false);
         RestoreTimeStopReadyTint();
@@ -449,7 +555,8 @@ public class PlayerWatchSkill : MonoBehaviour
 
         RestoreTimeStopReadyTint();
         timeStopReady = false;
-        Time.timeScale = 1f;
+        GameTimeScaleController.CancelSlowMotion(timeStopReadySlowHandle);
+        timeStopReadySlowHandle = GameTimeScaleController.InvalidHandle;
         ClearTimeStopReadyCameraZoom(false);
     }
 
@@ -462,7 +569,8 @@ public class PlayerWatchSkill : MonoBehaviour
         }
 
         timeStopReady = false;
-        Time.timeScale = 1f;
+        GameTimeScaleController.CancelSlowMotion(timeStopReadySlowHandle);
+        timeStopReadySlowHandle = GameTimeScaleController.InvalidHandle;
     }
 
     private void SetTimeStopReadyCameraZoom()
@@ -569,8 +677,8 @@ public class PlayerWatchSkill : MonoBehaviour
             if (roomEnemy == null || damageable == null || roomEnemy.IsDead)
                 continue;
 
-            float distance = Vector2.Distance(center, enemies[i].transform.position);
-            if (distance <= blinkSlashRadius)
+            float sqrDistance = ((Vector2)enemies[i].transform.position - center).sqrMagnitude;
+            if (sqrDistance <= blinkSlashRadius * blinkSlashRadius)
             {
                 Vector2 enemyPosition = enemies[i].transform.position;
                 Vector2 hitDirection = enemyPosition - center;
@@ -689,14 +797,14 @@ public class PlayerWatchSkill : MonoBehaviour
                 if (skipLastTarget && enemies[i] == lastBlinkTarget)
                     continue;
 
-                float distanceFromPlayer = Vector2.Distance(transform.position, enemies[i].transform.position);
-                if (distanceFromPlayer > markRange)
+                Vector2 enemyPosition = enemies[i].transform.position;
+                if ((enemyPosition - (Vector2)transform.position).sqrMagnitude > markRange * markRange)
                     continue;
 
-                float distanceFromFirstTarget = Vector2.Distance(firstTargetPosition, enemies[i].transform.position);
-                if (distanceFromFirstTarget > farthestDistance)
+                float sqrDistanceFromFirstTarget = (enemyPosition - firstTargetPosition).sqrMagnitude;
+                if (sqrDistanceFromFirstTarget > farthestDistance)
                 {
-                    farthestDistance = distanceFromFirstTarget;
+                    farthestDistance = sqrDistanceFromFirstTarget;
                     farthestEnemy = enemies[i];
                 }
             }
@@ -726,7 +834,7 @@ public class PlayerWatchSkill : MonoBehaviour
     private MonoBehaviour FindNearestEnemyInPass(MonoBehaviour[] enemies, Vector2 playerPosition, bool skipLastTarget)
     {
         MonoBehaviour nearestEnemy = null;
-        float nearestDistance = markRange;
+        float nearestSqrDistance = markRange * markRange;
 
         for (int i = 0; i < enemies.Length; i++)
         {
@@ -738,10 +846,10 @@ public class PlayerWatchSkill : MonoBehaviour
                 continue;
 
             Vector2 enemyPosition = enemies[i].transform.position;
-            float distance = Vector2.Distance(playerPosition, enemyPosition);
-            if (distance <= nearestDistance)
+            float sqrDistance = (enemyPosition - playerPosition).sqrMagnitude;
+            if (sqrDistance <= nearestSqrDistance)
             {
-                nearestDistance = distance;
+                nearestSqrDistance = sqrDistance;
                 nearestEnemy = enemies[i];
             }
         }

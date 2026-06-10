@@ -86,7 +86,7 @@ public class PlayerDodge : MonoBehaviour
             if (clockOutput != null)
                 clockOutput.GainFromDodge();
             JustDodged?.Invoke();
-            StartCoroutine(SlowRoutine(successSlowScale, successSlowTime));
+            GameTimeScaleController.RequestSlowMotion(successSlowScale, successSlowTime);
             Debug.Log("Just Dodge.", this);
         }
 
@@ -125,7 +125,7 @@ public class PlayerDodge : MonoBehaviour
     {
         if (toneFeedback != null)
             toneFeedback.Play(normalDodgeToneTime);
-        StartCoroutine(SlowRoutine(normalDodgeSlowScale, normalDodgeSlowTime));
+        GameTimeScaleController.RequestSlowMotion(normalDodgeSlowScale, normalDodgeSlowTime);
         Debug.Log("Dodge Success.", this);
     }
 
@@ -152,9 +152,9 @@ public class PlayerDodge : MonoBehaviour
             if (dodgeableAttack != null && dodgeableAttack.IsDodgeableAttackActiveFor(playerPosition))
                 return true;
 
-            float distance = Vector2.Distance(playerPosition, behaviour.transform.position);
-            float range = justDodgeCheckRange;
-            if (distance <= range)
+            float sqrDistance = ((Vector2)behaviour.transform.position - playerPosition).sqrMagnitude;
+            float sqrRange = justDodgeCheckRange * justDodgeCheckRange;
+            if (sqrDistance <= sqrRange)
                 return true;
         }
 
@@ -171,7 +171,7 @@ public class PlayerDodge : MonoBehaviour
             if (projectiles[i] == null)
                 continue;
 
-            if (Vector2.Distance(playerPosition, projectiles[i].transform.position) <= dodgeProjectileSuccessRange)
+            if (IsInRange(playerPosition, projectiles[i].transform.position, dodgeProjectileSuccessRange))
                 return true;
         }
 
@@ -181,7 +181,7 @@ public class PlayerDodge : MonoBehaviour
             if (explodingProjectiles[i] == null)
                 continue;
 
-            if (Vector2.Distance(playerPosition, explodingProjectiles[i].transform.position) <= dodgeProjectileSuccessRange)
+            if (IsInRange(playerPosition, explodingProjectiles[i].transform.position, dodgeProjectileSuccessRange))
                 return true;
         }
 
@@ -196,19 +196,16 @@ public class PlayerDodge : MonoBehaviour
             if (roomEnemy == null || roomEnemy.IsDead)
                 continue;
 
-            if (Vector2.Distance(playerPosition, behaviour.transform.position) <= dodgeEnemySuccessRange)
+            if (IsInRange(playerPosition, behaviour.transform.position, dodgeEnemySuccessRange))
                 return true;
         }
 
         return false;
     }
 
-    private IEnumerator SlowRoutine(float slowScale, float slowTime)
+    private bool IsInRange(Vector2 origin, Vector2 target, float range)
     {
-        float previousScale = Time.timeScale;
-        Time.timeScale = slowScale;
-        yield return new WaitForSecondsRealtime(slowTime);
-        if (Mathf.Approximately(Time.timeScale, slowScale))
-            Time.timeScale = previousScale;
+        return (target - origin).sqrMagnitude <= range * range;
     }
+
 }

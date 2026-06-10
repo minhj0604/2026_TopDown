@@ -31,6 +31,22 @@ public class CombatToneFeedback : MonoBehaviour
         toneRoutine = StartCoroutine(ToneRoutine(Mathf.Max(0.03f, duration)));
     }
 
+    public void StopAndRestore()
+    {
+        if (toneRoutine != null)
+        {
+            StopCoroutine(toneRoutine);
+            toneRoutine = null;
+        }
+
+        RestoreColors();
+    }
+
+    private void OnDisable()
+    {
+        StopAndRestore();
+    }
+
     private IEnumerator ToneRoutine(float duration)
     {
         CaptureTargets();

@@ -14,6 +14,12 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
     [SerializeField] private float hitFlashTime = 0.08f;
     [SerializeField] private float knockbackTime = 0.12f;
     [SerializeField] private float hitStunTime = 0.3f;
+    [SerializeField] private float hitGroggyTime = 0.75f;
+    [SerializeField] private float retreatAfterGroggyTime = 0.65f;
+    [SerializeField] private float retreatAfterGroggyDistance = 1.25f;
+    [SerializeField] private float postRetreatShootDelay = 0.25f;
+    [SerializeField] private float separationRange = 0.8f;
+    [SerializeField] private float separationWeight = 0.9f;
 
     public bool IsDead => currentHealth <= 0f && !isTimeStopped;
 
@@ -29,12 +35,14 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
     private float shootTimer;
     private float hitFlashTimer;
     private float groggyTimer;
+    private float retreatTimer;
     private float knockbackTimer;
     private float hitStunTimer;
     private Vector2 knockbackVelocity;
     private bool isTimeStopped;
     private bool pendingTimeStopHit;
     private bool defeatHandled;
+    private bool retreatAfterGroggy;
     private Vector2 pendingTimeStopKnockback;
     private Color normalColor;
 
@@ -79,15 +87,21 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
         {
             groggyTimer -= Time.deltaTime;
             if (groggyTimer <= 0f && !IsDead)
+            {
+                if (retreatAfterGroggy)
+                    StartRetreatAfterGroggy();
                 RefreshColor();
+            }
         }
 
+        if (retreatTimer > 0f)
+            retreatTimer -= Time.deltaTime;
         if (knockbackTimer > 0f)
             knockbackTimer -= Time.deltaTime;
         if (hitStunTimer > 0f)
             hitStunTimer -= Time.deltaTime;
 
-        if (hitStunTimer <= 0f && CanStartShoot())
+        if (hitStunTimer <= 0f && retreatTimer <= 0f && CanStartShoot())
             shootRoutine = StartCoroutine(ShootRoutine());
     }
 
@@ -105,6 +119,11 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
 
         if (hitStunTimer > 0f) return;
         if (groggyTimer > 0f) return;
+        if (retreatTimer > 0f)
+        {
+            MoveAwayFromPlayer(GetRetreatDistance());
+            return;
+        }
 
         Vector2 currentPosition = rb.position;
         Vector2 playerPosition = player.position;
@@ -117,6 +136,9 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
             moveDirection = toPlayer.normalized;
         else if (distance < preferredDistance - 0.2f)
             moveDirection = -toPlayer.normalized;
+
+        if (moveDirection.sqrMagnitude > 0.01f)
+            moveDirection = EnemySeparationUtility.AddSeparation(this, moveDirection, separationRange, separationWeight);
 
         rb.MovePosition(currentPosition + moveDirection * GetMoveSpeed() * Time.fixedDeltaTime);
     }
@@ -140,9 +162,7 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
             return;
         }
 
-        StartKnockback(hitDirection);
-        hitStunTimer = hitStunTime;
-        StopShootRoutine();
+        StartHitReaction(hitDirection);
 
         spriteRenderer.color = hitColor;
         hitFlashTimer = hitFlashTime;
@@ -160,12 +180,14 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
         StopShootRoutine();
         hitFlashTimer = 0f;
         groggyTimer = 0f;
+        retreatTimer = 0f;
         knockbackTimer = 0f;
         hitStunTimer = 0f;
         knockbackVelocity = Vector2.zero;
         isTimeStopped = false;
         pendingTimeStopHit = false;
         defeatHandled = false;
+        retreatAfterGroggy = false;
         pendingTimeStopKnockback = Vector2.zero;
         rb.linearVelocity = Vector2.zero;
         ApplyData();
@@ -182,8 +204,7 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
         {
             if (pendingTimeStopHit)
             {
-                StartKnockback(pendingTimeStopKnockback);
-                hitStunTimer = hitStunTime;
+                StartHitReaction(pendingTimeStopKnockback);
                 pendingTimeStopHit = false;
                 pendingTimeStopKnockback = Vector2.zero;
             }
@@ -203,6 +224,8 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
         if (IsDead) return;
 
         groggyTimer = duration;
+        retreatAfterGroggy = false;
+        retreatTimer = 0f;
         StopShootRoutine();
         rb.linearVelocity = Vector2.zero;
         RefreshColor();
@@ -210,12 +233,11 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
 
     private bool CanStartShoot()
     {
-        if (!CanAct() || IsDead || player == null || isTimeStopped || groggyTimer > 0f || shootTimer > 0f || shootRoutine != null)
+        if (!CanAct() || IsDead || player == null || isTimeStopped || groggyTimer > 0f || retreatTimer > 0f || shootTimer > 0f || shootRoutine != null)
             return false;
 
-        float distance = Vector2.Distance(rb.position, player.position);
         float shootRange = enemyData != null ? enemyData.shootRange : 3.2f;
-        return distance <= shootRange;
+        return ((Vector2)player.position - rb.position).sqrMagnitude <= shootRange * shootRange;
     }
 
     private IEnumerator ShootRoutine()
@@ -276,6 +298,46 @@ public class ShooterEnemy : MonoBehaviour, IDamageable, IRoomEnemy, IEnemyStatus
     private float GetProjectileDamage() => enemyData != null ? enemyData.projectileDamage : 7f;
     private float GetProjectileSpeed() => enemyData != null ? enemyData.projectileSpeed : 2.5f;
     private float GetKnockbackForce() => enemyData != null ? enemyData.knockbackForce : 2f;
+
+    private float GetRetreatDistance()
+    {
+        float preferredDistance = enemyData != null ? enemyData.preferredDistance : 2f;
+        return Mathf.Max(preferredDistance, retreatAfterGroggyDistance);
+    }
+
+    private void StartHitReaction(Vector2 hitDirection)
+    {
+        StartKnockback(hitDirection);
+        hitStunTimer = hitStunTime;
+        groggyTimer = Mathf.Max(groggyTimer, hitGroggyTime);
+        retreatAfterGroggy = true;
+        retreatTimer = 0f;
+        StopShootRoutine();
+    }
+
+    private void StartRetreatAfterGroggy()
+    {
+        retreatAfterGroggy = false;
+        retreatTimer = retreatAfterGroggyTime;
+        shootTimer = Mathf.Max(shootTimer, retreatAfterGroggyTime + postRetreatShootDelay);
+    }
+
+    private void MoveAwayFromPlayer(float targetDistance)
+    {
+        if (player == null)
+            return;
+
+        Vector2 toPlayer = (Vector2)player.position - rb.position;
+        if (toPlayer.sqrMagnitude <= 0.01f)
+            toPlayer = Vector2.down;
+
+        float currentDistance = toPlayer.magnitude;
+        if (currentDistance >= targetDistance)
+            return;
+
+        Vector2 moveDirection = EnemySeparationUtility.AddSeparation(this, -toPlayer.normalized, separationRange, separationWeight);
+        rb.MovePosition(rb.position + moveDirection * GetMoveSpeed() * Time.fixedDeltaTime);
+    }
 
     private void StartKnockback(Vector2 hitDirection)
     {
