@@ -13449,7 +13449,7 @@ MonoBehaviour:
   fallbackLobbyDoorPosition: {x: 0, y: 1.2}
   createFallbackMaintenanceStation: 1
   fallbackMaintenancePosition: {x: 1.2, y: 0}
-  createFallbackChoiceDoors: 1
+  createFallbackChoiceDoors: 0
   leftChoiceDoorPosition: {x: -0.45, y: 1.2}
   rightChoiceDoorPosition: {x: 0.45, y: 1.2}
 --- !u!114 &1800000004

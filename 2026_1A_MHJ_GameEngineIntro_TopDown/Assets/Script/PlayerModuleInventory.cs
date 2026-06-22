@@ -12,6 +12,8 @@ public class PlayerModuleInventory : MonoBehaviour
     private readonly List<ModuleData> ownedModules = new List<ModuleData>();
     private readonly List<ModuleData> equippedModules = new List<ModuleData>();
     private bool stationOpen;
+    public bool IsStationOpen => stationOpen;
+    public int OwnedModuleCount => ownedModules.Count;
 
     public void AddModule(ModuleData moduleData)
     {
@@ -48,6 +50,19 @@ public class PlayerModuleInventory : MonoBehaviour
         stationOpen = false;
     }
 
+    public ModuleData GetOwnedModule(int index)
+    {
+        if (index < 0 || index >= ownedModules.Count)
+            return null;
+
+        return ownedModules[index];
+    }
+
+    public bool IsEquipped(ModuleData moduleData)
+    {
+        return moduleData != null && equippedModules.Contains(moduleData);
+    }
+
     private int GetCurrentEquippedCost()
     {
         int totalCost = 0;
@@ -60,43 +75,4 @@ public class PlayerModuleInventory : MonoBehaviour
         return totalCost;
     }
 
-    private void OnGUI()
-    {
-        if (!showDebugUI || !stationOpen) return;
-
-        GUILayout.BeginArea(new Rect(Screen.width - 300f, 20f, 280f, 260f), GUI.skin.box);
-        GUILayout.Label($"Module Station ({CurrentEquippedCost}/{maxEquippedCost})");
-
-        if (ownedModules.Count == 0)
-        {
-            GUILayout.Label("No modules owned");
-        }
-        else
-        {
-            for (int i = 0; i < ownedModules.Count; i++)
-            {
-                ModuleData module = ownedModules[i];
-                if (module == null) continue;
-
-                bool equipped = equippedModules.Contains(module);
-                string label = $"{module.moduleName} / {module.rarity} / Cost {module.cost}";
-
-                if (equipped)
-                {
-                    if (GUILayout.Button($"Unequip {label}"))
-                        Unequip(module);
-                }
-                else
-                {
-                    if (GUILayout.Button($"Equip {label}"))
-                        TryEquip(module);
-                }
-            }
-        }
-
-        if (GUILayout.Button("Close"))
-            CloseStation();
-
-        GUILayout.EndArea();
-    }
 }

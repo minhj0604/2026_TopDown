@@ -18,6 +18,12 @@ public class ShopStation : MonoBehaviour
     private PlayerWallet currentWallet;
     private PlayerHealth currentHealth;
     private bool shopOpen;
+    public bool IsOpen => shopOpen;
+    public int Gold => currentWallet != null ? currentWallet.Gold : 0;
+    public int HealPrice => healPrice;
+    public float HealAmount => healAmount;
+    public bool CanHeal => currentHealth != null && !currentHealth.IsFullHealth && currentWallet != null && currentWallet.Gold >= healPrice;
+    public int ItemCount => shopItems.Length;
 
     private void Awake()
     {
@@ -91,6 +97,24 @@ public class ShopStation : MonoBehaviour
         return null;
     }
 
+    public ModuleData GetShopItem(int index)
+    {
+        if (index < 0 || index >= shopItems.Length)
+            return null;
+
+        return shopItems[index];
+    }
+
+    public bool IsItemSold(int index)
+    {
+        return index < 0 || index >= soldItems.Length || soldItems[index];
+    }
+
+    public int GetItemPrice(int index)
+    {
+        return GetPrice(GetShopItem(index));
+    }
+
     private int GetPrice(ModuleData module)
     {
         if (module == null) return 0;
@@ -107,8 +131,9 @@ public class ShopStation : MonoBehaviour
         return rarityPrice + module.cost * 5;
     }
 
-    private void TryBuy(int index)
+    public void TryBuy(int index)
     {
+        if (index < 0 || index >= shopItems.Length) return;
         if (currentInventory == null || currentWallet == null) return;
         if (soldItems[index]) return;
 
@@ -120,7 +145,7 @@ public class ShopStation : MonoBehaviour
         soldItems[index] = true;
     }
 
-    private void TryBuyHeal()
+    public void TryBuyHeal()
     {
         if (currentWallet == null || currentHealth == null) return;
         if (currentHealth.IsFullHealth) return;
@@ -149,37 +174,6 @@ public class ShopStation : MonoBehaviour
         module.cost = cost;
         module.description = "Shop prototype module. Effect will be added later.";
         return module;
-    }
-
-    private void OnGUI()
-    {
-        if (!showDebugUI || !shopOpen) return;
-
-        GUILayout.BeginArea(new Rect(Screen.width * 0.5f - 180f, Screen.height * 0.5f + 110f, 360f, 180f), GUI.skin.box);
-        GUILayout.Label($"Shop / Gold {currentWallet.Gold}");
-
-        GUI.enabled = currentHealth != null && !currentHealth.IsFullHealth;
-        if (GUILayout.Button($"Heal +{healAmount:0} HP / {healPrice}G"))
-            TryBuyHeal();
-        GUI.enabled = true;
-
-        for (int i = 0; i < shopItems.Length; i++)
-        {
-            ModuleData module = shopItems[i];
-            string label = module != null
-                ? $"{module.moduleName} / {module.rarity} / {GetPrice(module)}G"
-                : "Empty";
-
-            if (soldItems[i])
-                GUILayout.Label($"Sold: {label}");
-            else if (GUILayout.Button($"Buy {label}"))
-                TryBuy(i);
-        }
-
-        if (GUILayout.Button("Close"))
-            shopOpen = false;
-
-        GUILayout.EndArea();
     }
 
     private static Sprite GetGeneratedSprite()

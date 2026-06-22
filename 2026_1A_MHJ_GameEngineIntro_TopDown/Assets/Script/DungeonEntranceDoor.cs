@@ -8,6 +8,7 @@ public class DungeonEntranceDoor : MonoBehaviour
     [SerializeField] private Color doorColor = new Color(0.4f, 0.9f, 1f, 0.9f);
 
     private static Sprite generatedSprite;
+    private bool hasTriggered;
 
     private void Awake()
     {
@@ -30,12 +31,29 @@ public class DungeonEntranceDoor : MonoBehaviour
         dungeonRunManager = manager;
     }
 
+    private void OnEnable()
+    {
+        hasTriggered = false;
+    }
+
     private void OnTriggerEnter2D(Collider2D other)
     {
+        TryUseDoor(other);
+    }
+
+    private void OnTriggerStay2D(Collider2D other)
+    {
+        TryUseDoor(other);
+    }
+
+    private void TryUseDoor(Collider2D other)
+    {
+        if (hasTriggered) return;
         if (dungeonRunManager == null) return;
         if (dungeonRunManager.IsInDungeon) return;
-        if (other.GetComponent<PlayerController>() == null) return;
+        if (other.GetComponentInParent<PlayerController>() == null) return;
 
+        hasTriggered = true;
         dungeonRunManager.StartNewRun();
     }
 

@@ -14,6 +14,7 @@ public class ModuleRewardManager : MonoBehaviour
     private ModuleData[] fallbackPool;
 
     public bool IsChoosing => isChoosing;
+    public int ChoiceCount => currentChoices.Length;
 
     private void Awake()
     {
@@ -95,9 +96,18 @@ public class ModuleRewardManager : MonoBehaviour
         return module;
     }
 
-    private void TakeReward(int index)
+    public ModuleData GetChoice(int index)
+    {
+        if (index < 0 || index >= currentChoices.Length)
+            return null;
+
+        return currentChoices[index];
+    }
+
+    public void TakeReward(int index)
     {
         if (!isChoosing) return;
+        if (index < 0 || index >= currentChoices.Length) return;
 
         ModuleData module = currentChoices[index];
         if (targetInventory != null && module != null)
@@ -108,24 +118,4 @@ public class ModuleRewardManager : MonoBehaviour
         onRewardTaken = null;
     }
 
-    private void OnGUI()
-    {
-        if (!showDebugUI || !isChoosing) return;
-
-        GUILayout.BeginArea(new Rect(Screen.width * 0.5f - 180f, Screen.height * 0.5f - 90f, 360f, 190f), GUI.skin.box);
-        GUILayout.Label("Choose Module Reward");
-
-        for (int i = 0; i < currentChoices.Length; i++)
-        {
-            ModuleData module = currentChoices[i];
-            string label = module != null
-                ? $"{module.moduleName} / {module.rarity} / Cost {module.cost}"
-                : "Empty Module";
-
-            if (GUILayout.Button(label))
-                TakeReward(i);
-        }
-
-        GUILayout.EndArea();
-    }
 }

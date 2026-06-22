@@ -23,7 +23,6 @@ public class DungeonRoomController : MonoBehaviour
     private int lastNodeIndex = -1;
     private bool lastInDungeon;
     private GameObject activeRoomModule;
-    private DungeonExitDoor activeExitDoor;
     private MonoBehaviour[] roomEnemyBehaviours = new MonoBehaviour[0];
     private bool currentNodeCompleted;
     private float nonCombatCompleteTimer;
@@ -36,7 +35,7 @@ public class DungeonRoomController : MonoBehaviour
         if (dungeonRunManager == null)
             dungeonRunManager = FindFirstObjectByType<DungeonRunManager>();
         if (fallbackExitDoor == null)
-            fallbackExitDoor = FindFirstObjectByType<DungeonExitDoor>();
+            fallbackExitDoor = FindFirstObjectByType<DungeonExitDoor>(FindObjectsInactive.Include);
         if (player == null)
         {
             PlayerController playerController = FindFirstObjectByType<PlayerController>();
@@ -61,15 +60,21 @@ public class DungeonRoomController : MonoBehaviour
         if (moduleRewardManager == null)
             moduleRewardManager = gameObject.AddComponent<ModuleRewardManager>();
 
-        activeExitDoor = fallbackExitDoor;
         CacheFallbackRoomEnemies();
         SetCurrentRoomActive(false);
+        DisableAllExitDoors();
+    }
+
+    private void Start()
+    {
+        DisableAllExitDoors();
     }
 
     private void Update()
     {
         if (dungeonRunManager == null) return;
 
+        DisableAllExitDoors();
         CheckLobbyState();
         CheckNodeStarted();
         CheckNodeCompleted();
@@ -85,9 +90,9 @@ public class DungeonRoomController : MonoBehaviour
         if (!lastInDungeon)
         {
             ClearActiveRoomModule();
-            activeExitDoor = fallbackExitDoor;
             CacheFallbackRoomEnemies();
             SetCurrentRoomActive(false);
+            DisableAllExitDoors();
             lastDungeonLevel = -1;
             lastNodeIndex = -1;
         }
@@ -119,6 +124,7 @@ public class DungeonRoomController : MonoBehaviour
         {
             SetEnemiesActive(false);
         }
+        DisableAllExitDoors();
     }
 
     private void BuildRoomForCurrentNode()
@@ -131,15 +137,14 @@ public class DungeonRoomController : MonoBehaviour
             if (buildGeneratedRoomWhenNoPrefab)
             {
                 activeRoomModule = BuildGeneratedRoomModule();
-                DungeonRoomModule generatedRoomModule = activeRoomModule.GetComponent<DungeonRoomModule>();
-                activeExitDoor = generatedRoomModule.GetExitDoor();
                 CacheRoomEnemiesFrom(activeRoomModule);
+                DisableExitDoorsIn(activeRoomModule);
             }
             else
             {
-                activeExitDoor = fallbackExitDoor;
                 CacheFallbackRoomEnemies();
                 SetCurrentRoomActive(true);
+                DisableAllExitDoors();
             }
             return;
         }
@@ -148,8 +153,8 @@ public class DungeonRoomController : MonoBehaviour
         activeRoomModule.transform.localPosition = Vector3.zero;
 
         DungeonRoomModule roomModule = activeRoomModule.GetComponent<DungeonRoomModule>();
-        activeExitDoor = roomModule != null ? roomModule.GetExitDoor() : activeRoomModule.GetComponentInChildren<DungeonExitDoor>(true);
         CacheRoomEnemiesFrom(activeRoomModule);
+        DisableExitDoorsIn(activeRoomModule);
     }
 
     private void ClearActiveRoomModule()
@@ -196,9 +201,6 @@ public class DungeonRoomController : MonoBehaviour
 
         currentNodeCompleted = true;
 
-        if (activeExitDoor != null)
-            activeExitDoor.gameObject.SetActive(false);
-
         if (dungeonRunManager.IsCurrentNodeCombat && moduleRewardManager != null)
         {
             StartCoroutine(CombatClearRoutine());
@@ -219,10 +221,17 @@ public class DungeonRoomController : MonoBehaviour
         GameTimeScaleController.RequestSlowMotion(clearSlowScale, clearSlowTime);
         yield return new WaitForSecondsRealtime(clearSlowTime);
 
-        moduleRewardManager.OfferReward(
-            playerModuleInventory,
-            dungeonRunManager.CurrentNodeType == DungeonNodeType.Elite,
-            dungeonRunManager.CompleteCurrentNode);
+        if (moduleRewardManager != null)
+        {
+            moduleRewardManager.OfferReward(
+                playerModuleInventory,
+                dungeonRunManager.CurrentNodeType == DungeonNodeType.Elite,
+                dungeonRunManager.CompleteCurrentNode);
+        }
+        else
+        {
+            dungeonRunManager.CompleteCurrentNode();
+        }
     }
 
     private void PlayCombatClearCameraEffect(float clearSlowTime)
@@ -261,8 +270,30 @@ public class DungeonRoomController : MonoBehaviour
     private void SetCurrentRoomActive(bool isActive)
     {
         if (fallbackExitDoor != null)
-            fallbackExitDoor.gameObject.SetActive(isActive);
+            fallbackExitDoor.SetOpen(false);
         SetEnemiesActive(isActive);
+    }
+
+    private void DisableAllExitDoors()
+    {
+        DungeonExitDoor[] doors = FindObjectsByType<DungeonExitDoor>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        for (int i = 0; i < doors.Length; i++)
+        {
+            if (doors[i] != null)
+                doors[i].SetOpen(false);
+        }
+    }
+
+    private void DisableExitDoorsIn(GameObject root)
+    {
+        if (root == null) return;
+
+        DungeonExitDoor[] doors = root.GetComponentsInChildren<DungeonExitDoor>(true);
+        for (int i = 0; i < doors.Length; i++)
+        {
+            if (doors[i] != null)
+                doors[i].SetOpen(false);
+        }
     }
 
     private void SetEnemiesActive(bool isActive)
@@ -347,8 +378,7 @@ public class DungeonRoomController : MonoBehaviour
         BuildGeneratedTilemap(roomObject.transform, dungeonRunManager.CurrentNodeType);
         roomModule.playerSpawn = CreateMarker(roomObject.transform, "Player Spawn", new Vector2(0f, -2f));
 
-        DungeonExitDoor exitDoor = CreateGeneratedExitDoor(roomObject.transform);
-        roomModule.exitDoor = exitDoor;
+        roomModule.exitDoor = null;
 
         if (!dungeonRunManager.IsCurrentNodeCombat)
             CreateModuleEquipStation(roomObject.transform);
@@ -434,16 +464,6 @@ public class DungeonRoomController : MonoBehaviour
         marker.transform.SetParent(parent);
         marker.transform.localPosition = position;
         return marker.transform;
-    }
-
-    private DungeonExitDoor CreateGeneratedExitDoor(Transform parent)
-    {
-        GameObject doorObject = new GameObject("Exit Door");
-        doorObject.transform.SetParent(parent);
-        doorObject.transform.localPosition = new Vector2(0f, 2.4f);
-        DungeonExitDoor exitDoor = doorObject.AddComponent<DungeonExitDoor>();
-        doorObject.SetActive(false);
-        return exitDoor;
     }
 
     private void CreateModuleEquipStation(Transform parent)

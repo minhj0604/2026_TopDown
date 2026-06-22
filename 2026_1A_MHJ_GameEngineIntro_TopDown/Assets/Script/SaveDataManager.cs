@@ -97,20 +97,4 @@ public class SaveDataManager : MonoBehaviour
         Data.tutorialCompleted = completed;
     }
 
-    private void OnGUI()
-    {
-        if (!showDebugUI) return;
-
-        GUILayout.BeginArea(new Rect(20f, 220f, 260f, 130f), GUI.skin.box);
-        GUILayout.Label("JSON Save");
-        GUILayout.Label($"Best: {Data.bestDungeonLevel}-{Data.bestNodeIndex}");
-        GUILayout.Label($"Currency: {Data.permanentCurrency}");
-
-        if (GUILayout.Button("Save JSON"))
-            Save();
-        if (GUILayout.Button("Load JSON"))
-            Load();
-
-        GUILayout.EndArea();
-    }
 }

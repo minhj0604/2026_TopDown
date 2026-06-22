@@ -11,6 +11,7 @@ public class DungeonChoiceDoor : MonoBehaviour
 
     private static Sprite generatedSprite;
     private SpriteRenderer spriteRenderer;
+    private bool hasTriggered;
 
     private void Awake()
     {
@@ -33,13 +34,32 @@ public class DungeonChoiceDoor : MonoBehaviour
     {
         dungeonRunManager = manager;
         chooseLeft = isLeftDoor;
+        hasTriggered = false;
         RefreshColor();
+    }
+
+    private void OnEnable()
+    {
+        hasTriggered = false;
     }
 
     private void OnTriggerEnter2D(Collider2D other)
     {
+        TryUseDoor(other);
+    }
+
+    private void OnTriggerStay2D(Collider2D other)
+    {
+        TryUseDoor(other);
+    }
+
+    private void TryUseDoor(Collider2D other)
+    {
+        if (hasTriggered) return;
         if (dungeonRunManager == null) return;
-        if (other.GetComponent<PlayerController>() == null) return;
+        if (other.GetComponentInParent<PlayerController>() == null) return;
+
+        hasTriggered = true;
 
         if (chooseLeft)
             dungeonRunManager.ChooseLeftNode();

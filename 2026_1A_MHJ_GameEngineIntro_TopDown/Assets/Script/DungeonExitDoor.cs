@@ -10,6 +10,8 @@ public class DungeonExitDoor : MonoBehaviour
     private static Sprite generatedSprite;
     private SpriteRenderer spriteRenderer;
     private BoxCollider2D doorCollider;
+    private bool isOpen;
+    private bool hasTriggered;
 
     private void Awake()
     {
@@ -24,14 +26,48 @@ public class DungeonExitDoor : MonoBehaviour
 
         spriteRenderer.color = openColor;
         doorCollider.isTrigger = true;
+        SetOpen(gameObject.activeSelf);
+    }
+
+    private void OnEnable()
+    {
+        hasTriggered = false;
     }
 
     private void OnTriggerEnter2D(Collider2D other)
     {
-        if (dungeonRunManager == null) return;
-        if (other.GetComponent<PlayerController>() == null) return;
+        TryUseDoor(other);
+    }
 
+    private void OnTriggerStay2D(Collider2D other)
+    {
+        TryUseDoor(other);
+    }
+
+    private void TryUseDoor(Collider2D other)
+    {
+        if (hasTriggered) return;
+        if (!isOpen) return;
+        if (dungeonRunManager == null) return;
+        if (other.GetComponentInParent<PlayerController>() == null) return;
+
+        hasTriggered = true;
+        SetOpen(false);
         dungeonRunManager.CompleteCurrentNode();
+    }
+
+    public void SetOpen(bool open)
+    {
+        isOpen = open;
+        if (open)
+            hasTriggered = false;
+
+        if (spriteRenderer != null)
+            spriteRenderer.enabled = open;
+        if (doorCollider != null)
+            doorCollider.enabled = open;
+
+        gameObject.SetActive(open);
     }
 
     private static Sprite GetGeneratedSprite()

@@ -41,12 +41,4 @@ public class PlayerWallet : MonoBehaviour
         gold = 0;
     }
 
-    private void OnGUI()
-    {
-        if (!showDebugUI) return;
-
-        GUILayout.BeginArea(new Rect(500f, 20f, 130f, 50f), GUI.skin.box);
-        GUILayout.Label($"Gold: {gold}");
-        GUILayout.EndArea();
-    }
 }

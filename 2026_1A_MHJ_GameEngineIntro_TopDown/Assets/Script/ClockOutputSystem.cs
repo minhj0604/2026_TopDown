@@ -170,14 +170,4 @@ public class ClockOutputSystem : MonoBehaviour
         return "D";
     }
 
-    private void OnGUI()
-    {
-        if (!showDebugUI) return;
-
-        GUILayout.BeginArea(new Rect(20f, 205f, 280f, 96f), GUI.skin.box);
-        GUILayout.Label($"Clock Output: {currentOutput:0} / {maxOutput:0}");
-        GUILayout.Label($"Style Rank: {GetStyleRankName()}  x{GetStyleMultiplier():0.00}");
-        GUILayout.Label($"Style Score: {styleScore:0} / {maxStyleScore:0}");
-        GUILayout.EndArea();
-    }
 }

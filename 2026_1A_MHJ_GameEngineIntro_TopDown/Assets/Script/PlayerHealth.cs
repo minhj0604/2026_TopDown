@@ -18,7 +18,6 @@ public class PlayerHealth : MonoBehaviour
     [SerializeField] private float lowHealthShakeInterval = 0.45f;
     [SerializeField] private float lowHealthShakeTime = 0.05f;
     [SerializeField] private float lowHealthShakePower = 0.018f;
-    [SerializeField] private Color lowHealthVignetteColor = new Color(0.8f, 0f, 0f, 0.18f);
     [SerializeField] private bool showDebugUI = true;
 
     public float CurrentHealth => currentHealth;
@@ -33,7 +32,6 @@ public class PlayerHealth : MonoBehaviour
     private Rigidbody2D rb;
     private Color normalColor = Color.white;
     private bool isReturningToLobby;
-    private Texture2D vignetteTexture;
     private float lowHealthShakeTimer;
     private float invincibleBlinkTimer;
     private bool invincibleBlinkDimmed;
@@ -196,20 +194,6 @@ public class PlayerHealth : MonoBehaviour
             transform.position = new Vector3(spawnPosition.x, spawnPosition.y, transform.position.z);
     }
 
-    private void OnGUI()
-    {
-        DrawLowHealthVignette();
-
-        if (!showDebugUI) return;
-
-        GUILayout.BeginArea(new Rect(300f, 20f, 180f, 80f), GUI.skin.box);
-        GUILayout.Label($"Player HP: {currentHealth:0}/{maxHealth:0}");
-        GUILayout.Label(IsInvincible ? "Invincible" : "Vulnerable");
-        if (GUILayout.Button("Reset HP"))
-            ResetHealth();
-        GUILayout.EndArea();
-    }
-
     private void UpdateLowHealthCameraShake()
     {
         if (IsDead || !IsLowHealth())
@@ -231,31 +215,6 @@ public class PlayerHealth : MonoBehaviour
             shake = mainCamera.gameObject.AddComponent<SimpleCameraShake>();
 
         shake.Shake(lowHealthShakeTime, lowHealthShakePower);
-    }
-
-    private void DrawLowHealthVignette()
-    {
-        if (!IsLowHealth() || IsDead)
-            return;
-
-        if (vignetteTexture == null)
-        {
-            vignetteTexture = new Texture2D(1, 1);
-            vignetteTexture.SetPixel(0, 0, Color.white);
-            vignetteTexture.Apply();
-        }
-
-        float danger = 1f - Mathf.Clamp01(currentHealth / Mathf.Max(1f, maxHealth * lowHealthRatio));
-        Color previousColor = GUI.color;
-        GUI.color = new Color(lowHealthVignetteColor.r, lowHealthVignetteColor.g, lowHealthVignetteColor.b, lowHealthVignetteColor.a * danger);
-
-        float edge = Mathf.Lerp(18f, 54f, danger);
-        GUI.DrawTexture(new Rect(0f, 0f, Screen.width, edge), vignetteTexture);
-        GUI.DrawTexture(new Rect(0f, Screen.height - edge, Screen.width, edge), vignetteTexture);
-        GUI.DrawTexture(new Rect(0f, 0f, edge, Screen.height), vignetteTexture);
-        GUI.DrawTexture(new Rect(Screen.width - edge, 0f, edge, Screen.height), vignetteTexture);
-
-        GUI.color = previousColor;
     }
 
     private bool IsLowHealth()

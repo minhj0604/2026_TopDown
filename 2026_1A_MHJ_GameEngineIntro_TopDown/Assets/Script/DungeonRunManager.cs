@@ -35,7 +35,7 @@ public class DungeonRunManager : MonoBehaviour
     [SerializeField] private Vector2 fallbackMaintenancePosition = new Vector2(1.2f, 0f);
 
     [Header("Fallback Choice Doors")]
-    [SerializeField] private bool createFallbackChoiceDoors = true;
+    [SerializeField] private bool createFallbackChoiceDoors = false;
     [SerializeField] private Vector2 leftChoiceDoorPosition = new Vector2(-0.45f, 1.2f);
     [SerializeField] private Vector2 rightChoiceDoorPosition = new Vector2(0.45f, 1.2f);
 
@@ -45,6 +45,15 @@ public class DungeonRunManager : MonoBehaviour
     public bool IsInDungeon => isInDungeon;
     public bool IsWaitingForChoice => isInDungeon && waitingForChoice;
     public bool IsRunFinished => isRunFinished;
+    public DungeonNodeType LeftChoice => leftChoice;
+    public DungeonNodeType RightChoice => rightChoice;
+    public int NodesPerDungeon => GetNodesPerDungeon();
+    public bool ShowRunResult => showRunResult;
+    public bool LastRunCleared => lastRunCleared;
+    public int ClearedBattleNodes => clearedBattleNodes;
+    public int ClearedEliteNodes => clearedEliteNodes;
+    public int ClearedBossNodes => clearedBossNodes;
+    public int LastEarnedPermanentCurrency => lastEarnedPermanentCurrency;
 
     public bool IsCurrentNodeCombat
     {
@@ -142,6 +151,11 @@ public class DungeonRunManager : MonoBehaviour
     public void ChooseRightNode()
     {
         TryChooseNode(rightChoice);
+    }
+
+    public void ConfirmRunResult()
+    {
+        showRunResult = false;
     }
 
     public void CompleteCurrentNode()
@@ -469,7 +483,14 @@ public class DungeonRunManager : MonoBehaviour
 
     private void EnsureFallbackChoiceDoors()
     {
-        if (!createFallbackChoiceDoors) return;
+        if (!createFallbackChoiceDoors)
+        {
+            if (leftChoiceDoor != null)
+                leftChoiceDoor.gameObject.SetActive(false);
+            if (rightChoiceDoor != null)
+                rightChoiceDoor.gameObject.SetActive(false);
+            return;
+        }
 
         if (leftChoiceDoor == null)
             leftChoiceDoor = CreateChoiceDoor("Left Choice Door", leftChoiceDoorPosition, true);
@@ -494,10 +515,9 @@ public class DungeonRunManager : MonoBehaviour
             return;
 
         bool shouldShow = isInDungeon && waitingForChoice && !isRunFinished && !isTransitioning;
-        bool hasTwoChoices = shouldShow && leftChoice != rightChoice;
 
         leftChoiceDoor.gameObject.SetActive(shouldShow);
-        rightChoiceDoor.gameObject.SetActive(hasTwoChoices);
+        rightChoiceDoor.gameObject.SetActive(shouldShow);
     }
 
     public void EndRunByDeath()
@@ -597,93 +617,7 @@ public class DungeonRunManager : MonoBehaviour
         fadeAlpha = targetAlpha;
     }
 
-    private void OnGUI()
-    {
-        if (showDebugUI)
-            DrawDebugGUI();
-
-        DrawRunResultGUI();
-        DrawFadeGUI();
-    }
-
-    private void DrawDebugGUI()
-    {
-
-        GUILayout.BeginArea(new Rect(20f, 20f, 280f, 210f), GUI.skin.box);
-
-        if (!isInDungeon)
-        {
-            GUILayout.Label("Lobby");
-            GUILayout.Label($"Next Stage: {dungeonLevel}");
-            GUILayout.Label("Enter the dungeon door");
-            if (GUILayout.Button("Start Dungeon"))
-                StartNewRun();
-            GUILayout.EndArea();
-            return;
-        }
-
-        GUILayout.Label($"Stage: {dungeonLevel}");
-        GUILayout.Label($"Node: {currentNodeIndex} / {GetNodesPerDungeon()}");
-
-        if (isRunFinished)
-        {
-            GUILayout.Label("Run Clear");
-            if (GUILayout.Button("Return Lobby"))
-                ReturnToLobby();
-        }
-        else if (waitingForChoice)
-        {
-            GUILayout.Label("Choose next node");
-            if (leftChoice == rightChoice)
-            {
-                if (GUILayout.Button(GetNodeDisplayName(leftChoice)))
-                    ChooseLeftNode();
-            }
-            else
-            {
-                if (GUILayout.Button(GetNodeDisplayName(leftChoice)))
-                    ChooseLeftNode();
-                if (GUILayout.Button(GetNodeDisplayName(rightChoice)))
-                    ChooseRightNode();
-            }
-        }
-        else
-        {
-            GUILayout.Label($"Current: {GetNodeDisplayName(currentNodeType)}");
-            GUILayout.Label("Enter the exit door");
-        }
-
-        GUILayout.EndArea();
-    }
-
-    private void DrawRunResultGUI()
-    {
-        if (!showRunResult) return;
-
-        GUILayout.BeginArea(new Rect(Screen.width * 0.5f - 170f, Screen.height * 0.5f - 110f, 340f, 220f), GUI.skin.box);
-        GUILayout.Label(lastRunCleared ? "Run Clear Result" : "Run Failed Result");
-        GUILayout.Label($"Battle Nodes: {clearedBattleNodes}");
-        GUILayout.Label($"Elite Nodes: {clearedEliteNodes}");
-        GUILayout.Label($"Boss Nodes: {clearedBossNodes}");
-        GUILayout.Label($"Permanent Currency +{lastEarnedPermanentCurrency}");
-
-        if (GUILayout.Button("Confirm"))
-            showRunResult = false;
-
-        GUILayout.EndArea();
-    }
-
-    private void DrawFadeGUI()
-    {
-        if (fadeAlpha <= 0f) return;
-
-        Color previousColor = GUI.color;
-        GUI.color = new Color(0f, 0f, 0f, fadeAlpha);
-        GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), Texture2D.whiteTexture);
-        GUI.color = previousColor;
-    }
-
-    private string GetNodeDisplayName(DungeonNodeType nodeType)
+    public string GetNodeDisplayName(DungeonNodeType nodeType)
     {
         switch (nodeType)
         {
